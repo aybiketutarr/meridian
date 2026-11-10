@@ -242,7 +242,7 @@ class H(BaseHTTPRequestHandler):
         if xm and xm.group(1) in JOBS and JOBS[xm.group(1)]["xml"] and Path(JOBS[xm.group(1)]["xml"]).exists():
             return self.send(200, Path(JOBS[xm.group(1)]["xml"]).read_bytes(), "application/xml")
         if self.path == "/api/alerts": return self.send(200, {"alerts": ALERTS[-30:], "watch": [{"target": w["target"], "profile": w["profile"], "every": w["every"]} for w in WATCH]})
-        if self.path == "/api/net": return self.send(200, {"cidr": local_cidr()})
+        if self.path == "/api/net": return self.send(200, {"cidr": local_cidr(), "root": (os.geteuid() == 0) if hasattr(os, "geteuid") else None})
         if self.path == "/api/history":
             return self.send(200, [{"id": j["id"], "target": j["target"], "profile": j["profile"], "status": j["status"], "ts": j["ts"], "hosts": len(j["hosts"])} for j in sorted(JOBS.values(), key=lambda x: -x["ts"])])
         m = re.fullmatch(r"/api/scan/([0-9a-f]{8})", self.path)
@@ -283,6 +283,18 @@ def find_browser():
 
 def open_window(url, srv):
     """Native-feeling window: pywebview if installed, else a Chromium-family --app window, else the default browser."""
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        # Chromium refuses to run as root, so start the window as the user who ran sudo.
+        user, b = os.environ.get("SUDO_USER"), find_browser()
+        if user and user != "root" and b:
+            prof = str(Path(tempfile.gettempdir()) / f"meridian-ui-{uuid.uuid4().hex[:8]}")
+            keep = "DISPLAY,XAUTHORITY,WAYLAND_DISPLAY,XDG_RUNTIME_DIR,DBUS_SESSION_BUS_ADDRESS"
+            r = subprocess.run(["sudo", "-u", user, f"--preserve-env={keep}", b, f"--app={url}", f"--user-data-dir={prof}",
+                                "--window-size=1360,860", "--no-first-run", "--disable-extensions"])
+            shutil.rmtree(prof, ignore_errors=True)
+            if r.returncode == 0: return
+        print(f"Could not open a window as root. Open {url} in your normal browser. Ctrl+C to quit.")
+        threading.Event().wait(); return
     try:
         import webview
         webview.create_window("Meridian", url, width=1360, height=860, min_size=(980, 640), background_color="#08171f")
