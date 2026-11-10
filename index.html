@@ -151,7 +151,7 @@ $("#ack").onchange=e=>$("#go").disabled=!e.target.checked&&last.status!=="runnin
 $$(".tab").forEach(t=>t.onclick=()=>{$$(".tab").forEach(x=>x.setAttribute("aria-selected",x===t));["topo","hosts","fnd","his"].forEach(n=>$("#p-"+n).classList.toggle("hide",n!==t.dataset.tab));if(t.dataset.tab==="his")loadHis()});
 const note=ip=>{try{return localStorage.getItem("mr-n-"+ip)||""}catch(e){return""}};
 document.addEventListener("input",e=>{if(e.target.id==="nt"&&sel)try{localStorage.setItem("mr-n-"+sel,e.target.value)}catch(x){}});
-const toast=(m,ok)=>{const t=$("#toast");t.style.background=ok?"var(--good)":"var(--bad)";t.textContent=m;t.style.display="block";setTimeout(()=>t.style.display="none",5000)};
+const toast=(m,ok)=>{const t=$("#toast");t.style.background=ok?"var(--good)":"var(--bad)";t.textContent=m;t.style.display="block";setTimeout(()=>t.style.display="none",m.length>80?10000:5000)};
 const api=(u,b)=>fetch(u,b&&{method:"POST",headers:{"X-Token":TOKEN,"Content-Type":"application/json"},body:JSON.stringify(b)});
 async function start(demo){
  if(last.status==="running")return stop();
@@ -226,4 +226,6 @@ setInterval(pollAl,20000);pollAl();
 $("#auto").onclick=async()=>{const d=await (await fetch("/api/net")).json();$("#t").value=d.cidr};
 fetch("/api/history").then(r=>r.json()).then(l=>{$("#rt").innerHTML=[...new Set(l.map(x=>x.target))].map(t=>`<option value="${esc(t)}">`).join("")}).catch(()=>{});
 render();
+(async()=>{try{const d=await (await fetch("/api/net")).json();if(d.cidr&&$("#t").value==="192.168.1.0/24")$("#t").value=d.cidr;
+if(d.root===false)toast("Not running as root: host discovery can miss devices (no ARP). For full LAN results restart with: sudo -E \"$(command -v meridian)\"",true)}catch(e){}})();
 </script></body></html>
