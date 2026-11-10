@@ -10,7 +10,7 @@ A live web UI on top of the **nmap** engine: scan profiles, radial topology map,
 
 ```sh
 sudo apt install nmap chromium      # chromium/chrome gives the standalone app window
-chmod +x install.sh                 #Grant permission to run.
+chmod +x install.sh                 # Grant permission to run.
 ./install.sh                        # installs the `meridian` command + menu entry
 meridian                            # the app window opens
 ```
