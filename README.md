@@ -6,29 +6,97 @@ A live web UI on top of the **nmap** engine: scan profiles, radial topology map,
 
 > **Use responsibly.** Scan only networks you own or have explicit permission to test.
 
-## Quick start
+## Installation (Linux, step by step)
 
+Tested on Kali Linux. Works on Debian/Ubuntu-based systems too. Run every command in a terminal as your **normal user** (not root, do not log in as root).
+
+### Step 1 - Install the required packages
 ```sh
-sudo apt install nmap chromium      # chromium/chrome gives the standalone app window
-chmod +x install.sh                 # Grant permission to run.
-./install.sh                        # installs the `meridian` command + menu entry
-meridian                            # the app window opens
+sudo apt update
+sudo apt install -y git python3 nmap chromium
+```
+`chromium` is only needed for the standalone app window. Without it, Meridian opens your default browser. On Ubuntu the package may be called `chromium-browser` (or use Google Chrome).
+
+### Step 2 - Check the versions
+```sh
+whoami
+python3 --version
+nmap --version
+```
+`whoami` must **not** print `root`. Python must be **3.10 or newer**.
+
+### Step 3 - Download Meridian
+```sh
+cd ~
+git clone https://github.com/aybiketutarr/meridian.git
+cd meridian
+ls
+```
+You should see `server.py`, `index.html`, `install.sh`, `tests` and more.
+
+### Step 4 - Run the self-tests (optional but recommended)
+```sh
+python3 -m unittest discover -s tests
+```
+The last line must say `OK`.
+
+### Step 5 - Install the `meridian` command
+```sh
+sh install.sh
+```
+This copies the app to `~/.local/share/meridian-app`, creates the `meridian` command in `~/.local/bin` and adds a menu entry. No root needed.
+
+If the next step says `command not found: meridian`, add the folder to your PATH once:
+```sh
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc    # Kali (zsh)
+# bash users: use ~/.bashrc instead of ~/.zshrc
+source ~/.zshrc
 ```
 
-* Window mode: `pywebview` if installed, else a Chromium/Chrome `--app` window, else your default browser. `meridian --serve` runs headless (open the printed URL yourself).
-* OS detection, SYN scans and traceroute need root: `sudo -E "$(command -v meridian)"`.
-* No nmap? Click **Try with sample data** to preview the whole UI.
-* Remove: `./install.sh --uninstall`.
+### Step 6 - Start Meridian
+```sh
+meridian
+```
+The app window opens. Keep the terminal open while you use it; closing the window ends the program.
+
+### Step 7 - Run your first scan
+1. Click the **auto** button next to the target box (it fills in your local network, for example `192.168.1.0/24`).
+2. Tick the authorization checkbox (you confirm you may scan this network).
+3. Choose **Quick** and press **Scan**.
+4. Hosts appear in the table and on the topology map.
+
+No nmap yet? Click **Try with sample data** to see the full UI.
+
+### Step 8 - Full results with root (recommended on a LAN)
+Without root, nmap cannot use ARP and misses phones, TVs and firewalled devices. Close Meridian (Ctrl+C in the terminal) and start it like this:
+```sh
+sudo -E "$(command -v meridian)"
+```
+Type your password when asked. Meridian is still opened as **your** user, only the scanning gets root rights. Run the same scan again: you should now see more devices, with MAC vendors and OS guesses.
+
+### Using a VirtualBox VM?
+Set **Settings -> Network -> Adapter 1 -> Attached to: Bridged Adapter** and pick the network card your PC is really using (Wi-Fi or Ethernet). On Wi-Fi also set **Advanced -> Promiscuous Mode: Allow All**. With NAT, the VM only sees its own virtual network.
+
+### Update
+```sh
+cd ~/meridian
+git pull
+sh install.sh
+```
+
+### Remove
+```sh
+cd ~/meridian
+sh install.sh --uninstall
+```
 
 ### Without installing
-
 ```sh
 python3 server.py            # or: python3 server.py --serve
 ```
-Set `MERIDIAN_PORT=8765` to use a fixed port (default: a random free port).
+`--serve` runs without a window and prints a URL such as `http://127.0.0.1:44959` to open in your browser. Set `MERIDIAN_PORT=8765` to use a fixed port.
 
-### Docker
-
+### Docker (optional)
 ```sh
 docker build -t meridian .
 docker run --rm --net=host meridian     # then open http://127.0.0.1:8765
@@ -53,6 +121,14 @@ Localhost-only binding, per-run token (constant-time compare), Host and Origin c
 
 Risk scores are heuristics from exposed services and NSE output, not a substitute for a professional assessment.
 
+## Troubleshooting
+
+* **Only a few hosts are found on my LAN.** Run with root (Step 8). Also check that the target is *your* network (the **auto** button fills it in) and, inside a VM, that the adapter is **Bridged**. Some routers hide devices from each other (AP / client isolation).
+* **`vaInitialize failed` or other Chromium messages in the terminal** are harmless GPU warnings from the browser.
+* **`Running as root without --no-sandbox`**: fixed in current versions (the window is opened as the user who ran `sudo`). If you log in as a real root user, open the printed URL in a normal browser instead.
+* **`command not found: meridian`**: add `~/.local/bin` to your PATH (see Step 5).
+* **`nmap: NOT FOUND`** in the start-up line: run `sudo apt install nmap`.
+
 ## Development
 
 ```sh
@@ -60,7 +136,7 @@ python3 -m unittest discover -s tests -v
 ```
 CI runs the same command on Python 3.10 - 3.13 (`.github/workflows/tests.yml`).
 
-Layout: `server.py` (HTTP server, nmap runner, XML parser, validation), `index.html` (single-file UI), `tests/`, `install.sh`, `Dockerfile`.
+Layout: `server.py` (HTTP server, nmap runner, XML parser, validation), `index.html` (single-file UI), `docs/` (browser-only demo), `tests/`, `install.sh`, `Dockerfile`.
 
 ## Roadmap
 CVE lookup from service versions, NSE script picker, IPv6 targets.
