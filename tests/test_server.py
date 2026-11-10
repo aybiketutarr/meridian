@@ -143,8 +143,35 @@ class Http(unittest.TestCase):
         self.assertEqual(c, 200)
         self.assertNotIn("\n", server.JOBS[d["id"]]["target"]); self.assertNotIn("<", server.JOBS[d["id"]]["target"])
 
+    def test_net_reports_root_flag(self):
+        c, d = self.req("/api/net")
+        self.assertEqual(c, 200); self.assertIn("cidr", d); self.assertIn("root", d)
+
     def test_unknown_profile(self):
         self.assertEqual(self.req("/api/scan", {"demo": True, "profile": "rm -rf", "ack": True})[0], 400)
+
+
+class RootWindow(unittest.TestCase):
+    def test_root_launches_browser_as_sudo_user(self):
+        with mock.patch.object(server.os, "geteuid", return_value=0), \
+             mock.patch.dict(server.os.environ, {"SUDO_USER": "alice"}), \
+             mock.patch.object(server, "find_browser", return_value="/usr/bin/chromium"), \
+             mock.patch.object(server.subprocess, "run", return_value=mock.Mock(returncode=0)) as run:
+            server.open_window("http://127.0.0.1:1234", None)
+        cmd = run.call_args[0][0]
+        self.assertEqual(cmd[:3], ["sudo", "-u", "alice"])
+        self.assertIn("/usr/bin/chromium", cmd)
+        self.assertNotIn("--no-sandbox", cmd)
+
+    def test_real_root_without_sudo_user_does_not_launch_browser(self):
+        env = {k: v for k, v in server.os.environ.items() if k != "SUDO_USER"}
+        with mock.patch.object(server.os, "geteuid", return_value=0), \
+             mock.patch.dict(server.os.environ, env, clear=True), \
+             mock.patch.object(server, "find_browser", return_value="/usr/bin/chromium"), \
+             mock.patch.object(server.subprocess, "run") as run, \
+             mock.patch.object(server.threading, "Event") as ev:
+            server.open_window("http://127.0.0.1:1234", None)
+        run.assert_not_called(); ev.return_value.wait.assert_called()
 
 
 if __name__ == "__main__":
