@@ -42,6 +42,7 @@ The last line must say `OK`.
 
 ### Step 5 - Install the `meridian` command
 ```sh
+chmod +x install.sh
 sh install.sh
 ```
 This copies the app to `~/.local/share/meridian-app`, creates the `meridian` command in `~/.local/bin` and adds a menu entry. No root needed.
