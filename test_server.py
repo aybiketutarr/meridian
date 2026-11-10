@@ -1,0 +1,151 @@
+import json, sys, tempfile, threading, unittest, urllib.error, urllib.request
+from http.server import ThreadingHTTPServer
+from pathlib import Path
+from unittest import mock
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import server  # noqa: E402
+
+
+class Validation(unittest.TestCase):
+    def ok(self, t): return server.valid_targets(t)
+    def bad(self, t):
+        with self.assertRaises(ValueError): server.valid_targets(t)
+
+    def test_accepts(self):
+        for t in ("192.168.1.0/24", "10.0.0.0/22", "1.1.1.1", "scanme.nmap.org", "192.168.1.1-50", "192.168.1.5 192.168.1.9"):
+            self.ok(t)
+
+    def test_rejects_injection_and_junk(self):
+        for t in ("-oX /tmp/x", "192.168.1.1;ls", "$(id)", "a_b.com", "1.2.3", "300.1.1.1", ""):
+            self.bad(t)
+
+    def test_size_limits(self):
+        self.bad("10.0.0.0/8")
+        self.bad("10.0.0.0/21")
+        self.ok("10.0.0.0/23 10.0.4.0/23")          # exactly 1024 in total
+        self.bad("10.0.0.0/23 10.0.4.0/23 10.0.8.1")  # 1025
+        self.bad(" ".join(f"10.0.0.{i}" for i in range(33)))  # > 32 targets
+
+    def test_bad_ranges(self):
+        self.bad("192.168.1.50-10")
+        self.bad("192.168.1.1-300")
+        self.bad("10.0.0.1-8.8.8.8")
+
+    def test_ipv6_message(self):
+        with self.assertRaisesRegex(ValueError, "IPv6"): server.valid_targets("::1")
+
+    def test_is_public(self):
+        self.assertFalse(server.any_public("192.168.1.0/24 10.1.2.3 127.0.0.1"))
+        self.assertTrue(server.any_public("8.8.8.8"))
+        self.assertTrue(server.any_public("example.com"))
+        self.assertTrue(server.any_public("192.168.1.1 8.8.8.8"))
+
+
+class CustomArgs(unittest.TestCase):
+    def test_whitelist(self):
+        a = server.custom_args({"timing": 3, "ports": "22,80-90", "sv": True, "scripts": ["vulners", "evil"]})
+        self.assertEqual(a, ["-T3", "-p", "22,80-90", "-sV", "--script", "vulners"])
+
+    def test_rejects(self):
+        for o in ({"ports": "22;ls"}, {"timing": 9}, {"timing": "x"}):
+            with self.assertRaises(ValueError): server.custom_args(o)
+
+
+XML = """<nmaprun><host><status state="up"/><address addr="192.168.1.10" addrtype="ipv4"/>
+<address addr="AA:BB:CC:DD:EE:FF" addrtype="mac" vendor="Acme"/><hostnames><hostname name="nas.lan"/></hostnames>
+<ports><port protocol="tcp" portid="445"><state state="open"/><service name="smb" product="Samba" version="4.13"/>
+<script id="smb-vuln-ms17-010" output="VULNERABLE: RCE"/></port>
+<port protocol="tcp" portid="22"><state state="closed"/></port></ports></host>
+<host><status state="down"/><address addr="192.168.1.99" addrtype="ipv4"/></host></nmaprun>"""
+
+
+class Parse(unittest.TestCase):
+    def test_parse(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".xml", delete=False) as f: f.write(XML)
+        hosts = server.parse(f.name)
+        self.assertEqual(len(hosts), 1)                      # down host skipped
+        h = hosts[0]
+        self.assertEqual((h["ip"], h["name"], h["vendor"]), ("192.168.1.10", "nas.lan", "Acme"))
+        self.assertEqual([p["port"] for p in h["ports"]], [445])  # closed port skipped
+        self.assertTrue(h["vuln"])
+
+    def test_parse_missing_file(self):
+        self.assertIsNone(server.parse("/nonexistent.xml"))
+
+
+class Http(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        server.HIST = Path(cls.tmp.name) / "history.json"   # never touch the real ~/.local/share
+        cls.srv = ThreadingHTTPServer(("127.0.0.1", 0), server.H)
+        server.PORT = cls.srv.server_address[1]
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+        cls.base = f"http://127.0.0.1:{server.PORT}"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown(); cls.tmp.cleanup()
+
+    def setUp(self): server.JOBS.clear()
+
+    def req(self, path, body=None, token=True, host=None):
+        h = {"Content-Type": "application/json", "Origin": self.base}
+        if token: h["X-Token"] = server.TOKEN
+        if host: h["Host"] = host
+        r = urllib.request.Request(self.base + path, json.dumps(body).encode() if body is not None else None, h)
+        try:
+            with urllib.request.urlopen(r) as x: return x.status, json.loads(x.read() or b"{}")
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read() or b"{}")
+
+    def test_index_has_token_and_security_headers(self):
+        with urllib.request.urlopen(self.base + "/") as r:
+            html = r.read().decode()
+            self.assertIn(server.TOKEN, html); self.assertNotIn("__TOKEN__", html)
+            self.assertIn("default-src 'self'", r.headers["Content-Security-Policy"])
+            self.assertEqual(r.headers["X-Frame-Options"], "DENY")
+
+    def test_bad_host_blocked(self):
+        self.assertEqual(self.req("/api/history", host="evil.com")[0], 403)
+
+    def test_post_needs_token(self):
+        self.assertEqual(self.req("/api/scan", {"demo": True, "profile": "quick", "ack": True}, token=False)[0], 403)
+
+    def test_ack_required(self):
+        self.assertEqual(self.req("/api/scan", {"demo": True, "profile": "quick"})[0], 400)
+
+    def test_invalid_target_rejected_before_nmap_check(self):
+        with mock.patch.object(server.shutil, "which", return_value=None):
+            c, d = self.req("/api/scan", {"target": "-oX /tmp/x", "profile": "quick", "ack": True})
+        self.assertEqual(c, 400); self.assertIn("Invalid target", d["error"])
+
+    def test_public_target_needs_confirmation(self):
+        with mock.patch.object(server.shutil, "which", return_value="/usr/bin/nmap"), mock.patch.object(server, "run"):
+            c, d = self.req("/api/scan", {"target": "8.8.8.8", "profile": "quick", "ack": True})
+            self.assertEqual((c, d["error"]), (409, "public"))
+            c, d = self.req("/api/scan", {"target": "8.8.8.8", "profile": "quick", "ack": True, "public_ok": True})
+            self.assertEqual(c, 200)
+
+    def test_one_scan_at_a_time(self):
+        with mock.patch.object(server, "run"):
+            self.assertEqual(self.req("/api/scan", {"demo": True, "profile": "quick", "ack": True})[0], 200)
+            self.assertEqual(self.req("/api/scan", {"demo": True, "profile": "quick", "ack": True})[0], 409)
+
+    def test_demo_scan_and_stop(self):
+        c, d = self.req("/api/scan", {"demo": True, "profile": "service", "ack": True}); self.assertEqual(c, 200)
+        c, j = self.req("/api/scan/" + d["id"]); self.assertEqual(c, 200); self.assertEqual(j["profile"], "service")
+        self.assertEqual(self.req("/api/stop/" + d["id"], {})[0], 200)
+
+    def test_demo_label_is_sanitized(self):
+        c, d = self.req("/api/scan", {"demo": True, "target": "x\nFAKE LOG LINE<script>", "profile": "quick", "ack": True})
+        self.assertEqual(c, 200)
+        self.assertNotIn("\n", server.JOBS[d["id"]]["target"]); self.assertNotIn("<", server.JOBS[d["id"]]["target"])
+
+    def test_unknown_profile(self):
+        self.assertEqual(self.req("/api/scan", {"demo": True, "profile": "rm -rf", "ack": True})[0], 400)
+
+
+if __name__ == "__main__":
+    unittest.main()
