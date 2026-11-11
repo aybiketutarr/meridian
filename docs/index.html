@@ -48,8 +48,8 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .topo{display:grid;grid-template-columns:1fr 360px;gap:16px;height:100%}.side{display:flex;flex-direction:column;gap:16px;min-width:0;overflow:auto}
 .card{background:var(--s1);border:1px solid var(--line);border-radius:13px;padding:16px;min-width:0}
 #map{width:100%;height:100%;max-height:calc(100vh - 250px)}.node{cursor:pointer}.node text{font:11px var(--mono);fill:var(--tx)}
-.sweep{transform-origin:300px 260px;animation:sw 5s linear infinite}@keyframes sw{to{transform:rotate(360deg)}}
-@media(prefers-reduced-motion:reduce){.sweep,.bar.run b{animation:none}}
+.sweep{transform-origin:300px 260px;animation:sw 6s linear infinite;color:var(--acc);pointer-events:none}.sweep .wedge{fill:currentColor;opacity:.08}.sweep .beam{stroke:currentColor;stroke-width:2;opacity:.3}.sweep.scan{animation:sw 2.4s linear infinite,cc 8s linear infinite}.sweep.scan .wedge{opacity:.3}.sweep.scan .beam{opacity:.95;stroke-width:3}@keyframes sw{to{transform:rotate(360deg)}}@keyframes cc{0%,100%{color:var(--acc)}25%{color:var(--good)}50%{color:var(--med)}75%{color:var(--crit)}}.scantxt{font-size:13px;font-weight:600;fill:var(--tx)}
+@media(prefers-reduced-motion:reduce){.sweep,.sweep.scan,.bar.run b{animation:none}}
 table{width:100%;border-collapse:collapse}th{text-align:left;color:var(--mut);font-weight:500;font-size:12.5px;padding:8px;border-bottom:1px solid var(--line)}
 td{padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:top}tr[data-ip]{cursor:pointer}tr[data-ip]:hover,tr.sel{background:var(--s2)}
 .ip{font-family:var(--mono)}.mut{color:var(--mut)}.chip{display:inline-block;font:12px var(--mono);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:1px 7px;margin:0 4px 4px 0}
@@ -149,7 +149,6 @@ window.fetch=async(u,o)=>{
 };
 })();
 </script>
-
 <script>
 const TOKEN="demo",$=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const PF=[["quick","bolt","Quick","Top 100 ports in seconds"],["ping","radar","Host discovery","Who is online, no port scan"],["service","layers","Services","Versions on the top 200 ports"],["full","globe","Full TCP","All 65,535 ports with versions"],["os","cpu","OS detection","Fingerprinting, needs root"],["trace","route","Traceroute map","Real hop-by-hop topology, needs root"],["vuln","shield","Vulnerability","NSE vuln scripts, intrusive","hot"],["custom","sliders","Custom","Timing, ports, scripts"]];
@@ -190,7 +189,7 @@ $("#ack").onchange=e=>$("#go").disabled=!e.target.checked&&last.status!=="runnin
 $$(".tab").forEach(t=>t.onclick=()=>{$$(".tab").forEach(x=>x.setAttribute("aria-selected",x===t));["topo","hosts","fnd","his"].forEach(n=>$("#p-"+n).classList.toggle("hide",n!==t.dataset.tab));if(t.dataset.tab==="his")loadHis()});
 const note=ip=>{try{return localStorage.getItem("mr-n-"+ip)||""}catch(e){return""}};
 document.addEventListener("input",e=>{if(e.target.id==="nt"&&sel)try{localStorage.setItem("mr-n-"+sel,e.target.value)}catch(x){}});
-const toast=(m,ok)=>{const t=$("#toast");t.style.background=ok?"var(--good)":"var(--bad)";t.textContent=m;t.style.display="block";setTimeout(()=>t.style.display="none",5000)};
+const toast=(m,ok)=>{const t=$("#toast");t.style.background=ok?"var(--good)":"var(--bad)";t.textContent=m;t.style.display="block";setTimeout(()=>t.style.display="none",m.length>80?10000:5000)};
 const api=(u,b)=>fetch(u,b&&{method:"POST",headers:{"X-Token":TOKEN,"Content-Type":"application/json"},body:JSON.stringify(b)});
 async function start(demo){
  if(last.status==="running")return stop();
@@ -212,6 +211,11 @@ $("#his").onclick=async e=>{const l=e.target.dataset.l,c=e.target.dataset.c;
   const [a,b]=await Promise.all(cmp.map(i=>fetch("/api/scan/"+i).then(r=>r.json())));const m=x=>Object.fromEntries(x.hosts.map(h=>[h.ip,new Set(h.ports.map(p=>p.port))]));
   const A=m(a),B=m(b),o=[];for(const ip in B){if(!A[ip])o.push(["new","New host",ip]);else for(const p of B[ip])if(!A[ip].has(p))o.push(["high","New open port",ip+":"+p])}for(const ip in A){if(!B[ip])o.push(["med","Host gone",ip]);else for(const p of A[ip])if(!B[ip].has(p))o.push(["low","Port closed",ip+":"+p])}
   $("#diff").innerHTML=o.length?o.map(x=>`<div class="fi"><span class="badge b-${x[0]=="new"?"med":x[0]}">${x[1]}</span><b class="ip">${esc(x[2])}</b></div>`).join(""):`<div class="empty">No differences between the two scans.</div>`}};
+function sweepSVG(scan){
+ /* render() rebuilds the whole SVG every poll; a negative delay based on the clock keeps the rotation and the colour cycle continuous instead of restarting at 0 deg each second. */
+ const t=performance.now()/1000,d1=-(t%(scan?2.4:6)).toFixed(2),d2=-(t%8).toFixed(2);
+ const st=scan?`animation-delay:${d1}s,${d2}s`:`animation-delay:${d1}s`;
+ return `<g class="sweep${scan?" scan":""}" style="${st}"><path class="wedge" d="M300 260 L300 30 A230 230 0 0 1 463 97Z"/><line class="beam" x1="300" y1="260" x2="463" y2="97"/></g>`}
 function render(){
  const run=last.status==="running",ports=hosts.reduce((a,h)=>a+h.ports.length,0),fl=hosts.flatMap(h=>finds(h).map(f=>({...f,h}))),bad=hosts.filter(h=>risk(h)!=="low").length;
  $("#k1").firstChild.textContent=hosts.length;$("#k2").firstChild.textContent=ports;$("#k3").firstChild.textContent=fl.length;$("#k4").firstChild.textContent=bad;
@@ -222,7 +226,7 @@ function render(){
  const gw=hosts.find(h=>h.ip.endsWith(".1"))||hosts[0],rest=hosts.filter(h=>h!==gw);
  const col=h=>C(risk(h));
  const pos=(h,i)=>{const a=2*Math.PI*i/Math.max(rest.length,1)-Math.PI/2,r=["crit","high"].includes(risk(h))?130:risk(h)==="med"?170:210;return[300+r*Math.cos(a),260+r*Math.sin(a)]};
- const tr=hosts.some(h=>(h.hops||[]).length);let s=[110,170,230].map(r=>`<circle cx="300" cy="260" r="${r}" fill="none" stroke="var(--line)" stroke-dasharray="2 6"/>`).join("")+`<path class="sweep" d="M300 260 L300 30 A230 230 0 0 1 463 97Z" fill="var(--acc)" opacity=".08"/>`;
+ const tr=hosts.some(h=>(h.hops||[]).length);let s=[110,170,230].map(r=>`<circle cx="300" cy="260" r="${r}" fill="none" stroke="var(--line)" stroke-dasharray="2 6"/>`).join("")+sweepSVG(last.status==="running");
  if(!tr)rest.forEach((h,i)=>{const[x,y]=pos(h,i);s+=`<line x1="300" y1="260" x2="${x}" y2="${y}" stroke="var(--line)"/>`});
  const node=(h,x,y,r)=>`<g class="node" data-ip="${esc(h.ip)}" tabindex="0"><title>${esc(h.ip)} · ${kind(h)} · risk ${score(h)}/100</title>${risk(h)==="crit"?`<circle class="pulse" cx="${x}" cy="${y}"/>`:""}<circle cx="${x}" cy="${y}" r="${r}" fill="${col(h)}" fill-opacity=".2" stroke="${col(h)}" stroke-width="${h.ip===sel?4:2}"/><text x="${x}" y="${y+r+14}" text-anchor="middle">${esc(h.name||h.ip)}</text></g>`;
  if(tr){const hn={};hosts.forEach(h=>{let pv="you";(h.hops||[]).forEach((ip,i)=>{if(!hn[ip])hn[ip]={ip,d:i+1,p:pv};pv=ip});(hn[h.ip]=hn[h.ip]||{ip:h.ip,d:(h.hops||[]).length+1,p:pv}).h=h});
@@ -233,7 +237,7 @@ function render(){
  s+=`<circle cx="300" cy="260" r="14" fill="var(--acc)"/><text x="300" y="290" text-anchor="middle" font-size="11" fill="var(--tx)">this machine</text>`}
  else{if(gw)s+=node(gw,300,260,20);rest.forEach((h,i)=>{const[x,y]=pos(h,i);s+=node(h,x,y,9+Math.min(h.ports.length,6)*1.5)})}
  s+=["crit","high","med","low"].map((k,i)=>`<circle cx="${18+i*92}" cy="500" r="5" fill="${C(k)}"/><text x="${28+i*92}" y="504" font-size="11" fill="var(--mut)">${LBL[k]}</text>`).join("")+`<text x="400" y="504" font-size="11" fill="var(--mut)">size = open ports</text>`;
- $("#map").innerHTML=hosts.length?s:s+`<text x="300" y="265" text-anchor="middle" fill="var(--mut)" font-size="15">Pick a scan type, then press Scan</text>`;
+ $("#map").innerHTML=hosts.length?s+(last.status==="running"?`<text class="scantxt" x="14" y="22">Scanning… ${hosts.length} host${hosts.length>1?"s":""} found</text>`:""):s+`<text x="300" y="265" text-anchor="middle" fill="var(--mut)" font-size="15">${last.status==="running"?"Scanning… looking for hosts":"Pick a scan type, then press Scan"}</text>`;
  const rc={crit:0,high:0,med:0,low:0};hosts.forEach(h=>rc[risk(h)]++);const tot=hosts.length||1,posture=hosts.length?Math.max(0,100-Math.round(hosts.reduce((a,h)=>a+score(h),0)/hosts.length)):null;
  let off=0;const arc=(n,c)=>{const l=n/tot*283;const e=`<circle cx="60" cy="60" r="45" fill="none" stroke="${c}" stroke-width="12" stroke-dasharray="${l} ${283-l}" stroke-dashoffset="${-off}" transform="rotate(-90 60 60)"/>`;off+=l;return e};
  const sv={};hosts.forEach(h=>h.ports.forEach(p=>sv[p.service||"unknown"]=(sv[p.service||"unknown"]||0)+1));const top=Object.entries(sv).sort((a,b)=>b[1]-a[1]).slice(0,5),mx=top[0]?.[1]||1;
@@ -265,4 +269,6 @@ setInterval(pollAl,20000);pollAl();
 $("#auto").onclick=async()=>{const d=await (await fetch("/api/net")).json();$("#t").value=d.cidr};
 fetch("/api/history").then(r=>r.json()).then(l=>{$("#rt").innerHTML=[...new Set(l.map(x=>x.target))].map(t=>`<option value="${esc(t)}">`).join("")}).catch(()=>{});
 render();
+(async()=>{try{const d=await (await fetch("/api/net")).json();if(d.cidr&&$("#t").value==="192.168.1.0/24")$("#t").value=d.cidr;
+if(d.root===false)toast("Not running as root: host discovery can miss devices (no ARP). For full LAN results restart with: sudo -E \"$(command -v meridian)\"",true)}catch(e){}})();
 </script></body></html>
