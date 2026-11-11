@@ -4,7 +4,7 @@ import ipaddress, json, os, signal, socket, re, secrets, shutil, subprocess, sys
 import xml.etree.ElementTree as ET
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-
+ 
 PORT = 0  # chosen at start-up (free port)
 TOKEN = secrets.token_urlsafe(16)
 JOBS = {}
@@ -20,7 +20,7 @@ PROFILES = {
 }
 SCRIPTS = {"default", "safe", "vuln", "discovery", "auth", "version", "vulners"}
 HIST = Path.home() / ".local/share/meridian/history.json"
-
+ 
 def custom_args(o):
     t = int(o.get("timing", 4))
     if not 0 <= t <= 5: raise ValueError("Timing must be 0-5")
@@ -34,24 +34,78 @@ def custom_args(o):
     sc = [x for x in o.get("scripts", []) if x in SCRIPTS]
     if sc: a += ["--script", ",".join(sc)]
     return a
-
+ 
+def add_script(a, name):
+    """Add an NSE script to a nmap argument list (merging into an existing --script)."""
+    a = list(a)
+    if "--script" in a:
+        i = a.index("--script") + 1
+        if name not in a[i].split(","): a[i] += "," + name
+    else: a += ["--script", name]
+    return a
+ 
+def scan_args(profile, options=None, lookup=False):
+    """Final nmap arguments. With lookup=True every port-scanning profile also detects versions and runs the vulners NSE
+    script, which turns a software name + version into CVEs and known exploits. Host discovery (-sn) is left alone."""
+    a = custom_args(options or {}) if profile == "custom" else list(PROFILES[profile])
+    if not lookup or "-sn" in a: return a
+    if "-sV" not in a:
+        if profile == "custom": return a        # the user switched version detection off: nothing to look up
+        a += ["-sV", "--version-light"]
+    # paths=none: do not probe ~900 web paths on the target. max_items=0: never spend API credits (smart audit).
+    return add_script(a, "vulners") + ["--script-args", "vulners.paths=none,vulners.max_items=0"]
+ 
+def _num(x):
+    try: return float(x)
+    except (TypeError, ValueError): return None
+ 
+def safe_url(u):
+    u = (u or "").strip()
+    return u[:300] if u.startswith("https://") else ""
+ 
+def cvss_sev(c):
+    return "" if c is None else "critical" if c >= 9 else "high" if c >= 7 else "medium" if c >= 4 else "low"
+ 
+def parse_vulners(sc, limit=15):
+    """<script id="vulners"> (nmap-vulners 1.x and 2.x) -> summary dict with the top findings, or None when it holds none."""
+    mode = next(((e.text or "").strip() for e in sc.findall("elem") if e.get("key") == "mode"), "")
+    items = []
+    for cpe_t in sc.findall("table"):
+        for ft in cpe_t.findall("table"):
+            f = {e.get("key"): (e.text or "").strip() for e in ft.findall("elem") if e.get("key")}
+            if not f.get("id"): continue
+            flag = lambda k: f.get(k, "").lower() == "true"
+            cvss = _num(f.get("cvss"))
+            items.append({"id": f["id"][:80], "type": f.get("type", "")[:24], "cvss": cvss,
+                          "sev": (f.get("severity") or cvss_sev(cvss)).lower()[:10],
+                          "kev": flag("kev"), "active": f.get("exploitation", "").lower() == "active",
+                          "exploit": flag("is_exploit") or flag("exploit_known"),
+                          "epss": _num(f.get("epss")), "ai": _num(f.get("ai_score")),
+                          "title": f.get("title", "")[:160], "href": safe_url(f.get("href")), "src": safe_url(f.get("source_href")),
+                          "cpe": (cpe_t.get("key") or "")[:120]})
+    if not items: return None
+    # facts outrank predictions: actively exploited, then public exploit, then likelihood; CVSS breaks ties
+    items.sort(key=lambda i: (i["kev"], i["active"], i["exploit"], i["epss"] if i["epss"] is not None else (i["ai"] or 0) / 10, i["cvss"] or 0), reverse=True)
+    return {"mode": mode, "total": len(items), "cves": sum(i["id"].upper().startswith("CVE-") for i in items),
+            "exploits": sum(i["exploit"] for i in items), "kev": sum(i["kev"] for i in items), "items": items[:limit]}
+ 
 def save_history():
     try:
         HIST.parent.mkdir(parents=True, exist_ok=True)
         keep = [{k: j[k] for k in ("id", "target", "profile", "hosts", "ts", "dur")} for j in JOBS.values() if j["status"] in ("done", "stopped")]
         HIST.write_text(json.dumps(keep[-50:])); os.chmod(HIST, 0o600)
     except OSError: pass
-
+ 
 def load_history():
     try:
         for j in json.loads(HIST.read_text()):
             JOBS[j["id"]] = j | {"status": "done", "error": "", "t0": 0, "demo": False, "xml": ""}
     except (OSError, ValueError, KeyError): pass
-
+ 
 HOST_RE = re.compile(r"^(?=.*[A-Za-z])[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?)*$")
 RANGE_RE = re.compile(r"^(\d{1,3}\.\d{1,3}\.\d{1,3})\.(\d{1,3})-(\d{1,3})$")  # 192.168.1.10-50
 MAX_ADDRS = 1024  # a /22
-
+ 
 def target_size(t):
     """Validate ONE target (IPv4, CIDR, last-octet range or hostname) and return how many addresses it covers."""
     t = (t or "").strip()
@@ -73,10 +127,10 @@ def target_size(t):
     except ValueError: pass
     if HOST_RE.match(t): return 1
     raise ValueError("Invalid target")
-
+ 
 def valid_target(t):
     target_size(t); return t.strip()
-
+ 
 def is_public(t):
     """True for anything that is not a private/loopback/link-local IPv4 target (hostnames count as public)."""
     try:
@@ -85,16 +139,16 @@ def is_public(t):
         return not all(n.is_private or n.is_loopback or n.is_link_local for n in nets)
     except ValueError:
         return True
-
+ 
 def valid_targets(t):
     """Space/comma separated list: 1 to 32 targets, at most 1024 addresses in total."""
     parts = re.split(r"[\s,]+", (t or "").strip())
     if not parts or len(parts) > 32 or "" in parts: raise ValueError("Enter 1 to 32 targets")
     if sum(target_size(p) for p in parts) > MAX_ADDRS: raise ValueError("Too many addresses in total (max 1024)")
     return " ".join(p.strip() for p in parts)
-
+ 
 def any_public(t): return any(is_public(x) for x in t.split())
-
+ 
 def local_cidr():
     """Best-effort guess of the local /24 (no packets are sent by this UDP connect)."""
     try:
@@ -103,7 +157,7 @@ def local_cidr():
         return str(ipaddress.ip_network(ip + "/24", strict=False))
     except OSError:
         return "192.168.1.0/24"
-
+ 
 def audit(msg):
     """Append-only local audit trail of every scan that was started."""
     try:
@@ -111,7 +165,7 @@ def audit(msg):
         with open(p, "a") as f: f.write(time.strftime("%Y-%m-%d %H:%M:%S ") + re.sub(r"[\r\n]+", " ", msg) + "\n")
         os.chmod(p, 0o600)
     except OSError: pass
-
+ 
 def parse(path):
     try:
         txt = Path(path).read_text(errors="ignore")
@@ -130,36 +184,59 @@ def parse(path):
             if p.find("state").get("state") != "open":
                 continue
             s = p.find("service")
-            scripts = [{"id": x.get("id"), "out": (x.get("output") or "")[:1500]} for x in p.findall("script")]
-            ports.append({"port": int(p.get("portid")), "proto": p.get("protocol"),
-                          "service": s.get("name", "") if s is not None else "",
-                          "version": " ".join(filter(None, [s.get("product"), s.get("version")])) if s is not None else "",
-                          "scripts": scripts})
+            scripts, vulns = [], None
+            for x in p.findall("script"):
+                if x.get("id") == "vulners":
+                    vulns = parse_vulners(x)
+                    if vulns: continue          # structured: shown as a list instead of raw text
+                scripts.append({"id": x.get("id"), "out": (x.get("output") or "")[:1500]})
+            port = {"port": int(p.get("portid")), "proto": p.get("protocol"),
+                    "service": s.get("name", "") if s is not None else "",
+                    "version": " ".join(filter(None, [s.get("product"), s.get("version")])) if s is not None else "",
+                    "ver": bool(s is not None and s.get("version")),
+                    "cpes": [c.text for c in s.findall("cpe") if c.text][:4] if s is not None else [],
+                    "scripts": scripts}
+            if vulns: port["vulns"] = vulns
+            ports.append(port)
         vuln = any("VULNERABLE" in x["out"].upper() for p in ports for x in p["scripts"])
         hosts.append({"ip": addrs.get("ipv4") or addrs.get("ipv6"), "mac": addrs.get("mac", ""), "vendor": (h.find("address[@addrtype='mac']").get("vendor", "") if h.find("address[@addrtype='mac']") is not None else ""),
                       "name": hn.get("name") if hn is not None else "",
                       "os": om.get("name") if om is not None else "", "ports": ports, "vuln": vuln,
                       "hops": [x.get("ipaddr") for x in h.findall("trace/hop") if x.get("ipaddr")]})
     return hosts
-
-def demo():
+ 
+def _dv(id_, cvss, exploit=False):
+    return {"id": id_, "type": "cve", "cvss": cvss, "sev": cvss_sev(cvss), "kev": False, "active": False, "exploit": exploit, "epss": None, "ai": None,
+            "title": "", "href": f"https://vulners.com/cve/{id_}", "src": f"https://nvd.nist.gov/vuln/detail/{id_}", "cpe": ""}
+ 
+DEMO_VULNS = {("192.168.1.10", 21): [_dv("CVE-2011-2523", 9.8, True)],
+              ("192.168.1.10", 8080): [_dv("CVE-2021-42013", 9.8, True), _dv("CVE-2021-41773", 7.5, True)],
+              ("192.168.1.57", 80): [_dv("CVE-2017-17562", 8.1, True)]}
+ 
+def demo(lookup=False):
     d = [("192.168.1.1", "gateway.lan", "Linux 5.15", [(22, "ssh", "OpenSSH 9.2"), (80, "http", "lighttpd 1.4"), (443, "https", "")], False),
-         ("192.168.1.10", "nas.lan", "Linux 4.x", [(445, "smb", "Samba 4.13"), (5000, "http", "Synology DSM")], True),
+         ("192.168.1.10", "nas.lan", "Linux 4.x", [(21, "ftp", "vsftpd 2.3.4"), (445, "smb", "Samba 4.13"), (5000, "http", "Synology DSM"), (8080, "http", "Apache httpd 2.4.49")], True),
          ("192.168.1.23", "printer.lan", "", [(631, "ipp", "CUPS 2.4"), (9100, "jetdirect", ""), (23, "telnet", "")], False),
          ("192.168.1.42", "dev-laptop", "Windows 11", [(135, "msrpc", ""), (3389, "rdp", "")], False),
          ("192.168.1.57", "cam-garage", "Linux 3.x", [(554, "rtsp", ""), (80, "http", "GoAhead 2.5")], True),
          ("192.168.1.88", "", "", [], False)]
+    def port(i, p, sv, ver):
+        o = {"port": p, "proto": "tcp", "service": sv, "version": ver, "ver": bool(re.search(r"\d", ver)), "cpes": ["cpe:/a:demo:" + sv] if re.search(r"\d", ver) else [],
+             "scripts": [{"id": "smb-vuln-ms17-010", "out": "VULNERABLE: Remote Code Execution (CVE-2017-0143)"}] if p == 445 else []}
+        v = DEMO_VULNS.get((i, p)) if lookup else None
+        if v: o["vulns"] = {"mode": "free", "total": len(v), "cves": len(v), "exploits": sum(x["exploit"] for x in v), "kev": 0, "items": v}
+        return o
     return [{"ip": i, "mac": "", "name": n, "os": o, "vuln": v,
              "hops": ([] if i.endswith(".1") else ["192.168.1.1"] + (["192.168.1.254"] if i.endswith(("42", "57")) else [])),
-             "ports": [{"port": p, "proto": "tcp", "service": s, "version": ver, "scripts": ([{"id": "smb-vuln-ms17-010", "out": "VULNERABLE: Remote Code Execution (CVE-2017-0143)"}] if p == 445 else [{"id": "vulners", "out": "CVE-2021-33044 9.8 CVE-2020-25078 7.5"}] if (p == 80 and i.endswith("57")) else [])} for p, s, ver in ps]}
+             "ports": [port(i, p, sv, ver) for p, sv, ver in ps]}
             for i, n, o, ps, v in d]
-
+ 
 def run(job, args):
     xml = job["xml"]
     try:
         if job["demo"]:
             for k in range(1, 7):
-                time.sleep(1.2); job["hosts"] = demo()[:k]
+                time.sleep(1.2); job["hosts"] = demo(job.get("lookup"))[:k]
                 if job["status"] == "stopped": break
         else:
             p = job["proc"] = subprocess.Popen(["nmap", *args, "-oX", xml, *job["target"].split()], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
@@ -175,9 +252,9 @@ def run(job, args):
     except Exception as e:
         job["status"], job["error"] = "error", str(e)
     job["dur"] = int(time.time() - job["t0"]); save_history()
-
+ 
 WATCH, ALERTS = [], []
-
+ 
 def start_job(target, profile, args):
     jid = uuid.uuid4().hex[:8]
     JOBS[jid] = {"status": "running", "hosts": [], "error": "", "target": target, "profile": profile, "id": jid, "ts": time.time(),
@@ -185,7 +262,7 @@ def start_job(target, profile, args):
     audit(f"watch-scan {jid} target={target} profile={profile}")
     threading.Thread(target=run, args=(JOBS[jid], args), daemon=True).start()
     return jid
-
+ 
 def diff_alert(prev, cur, label):
     now = time.strftime("%H:%M:%S"); old = {h["ip"]: {p["port"] for p in h["ports"]} for h in prev["hosts"]}
     for h in cur["hosts"]:
@@ -194,7 +271,7 @@ def diff_alert(prev, cur, label):
             for p in {p["port"] for p in h["ports"]} - old[h["ip"]]: ALERTS.append(f"{now} NEW PORT {h['ip']}:{p}")
     for ip in old:
         if ip not in {h["ip"] for h in cur["hosts"]}: ALERTS.append(f"{now} HOST GONE {ip}")
-
+ 
 def watcher():
     while True:
         time.sleep(20)
@@ -206,7 +283,7 @@ def watcher():
                 w["prev"], w["seen"] = j, w["jid"]
             if time.time() >= w["next"] and not any(x["status"] == "running" for x in JOBS.values()):
                 w["jid"] = start_job(w["target"], w["profile"], PROFILES[w["profile"]]); w["next"] = time.time() + w["every"] * 60
-
+ 
 def handle_watch(d):
     if d.get("ack") is not True or d.get("profile") not in PROFILES: raise ValueError("Profile/authorization missing")
     t = valid_targets(d.get("target")); m = int(d.get("minutes", 0))
@@ -218,7 +295,7 @@ def handle_watch(d):
     WATCH.append({"target": t, "profile": d["profile"], "every": m, "next": 0})
     audit(f"watch target={t} profile={d['profile']} every={m}min")
     return 200, {"ok": True}
-
+ 
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def send(self, code, body, ctype="application/json"):
@@ -248,7 +325,7 @@ class H(BaseHTTPRequestHandler):
         m = re.fullmatch(r"/api/scan/([0-9a-f]{8})", self.path)
         j = JOBS.get(m.group(1)) if m else None
         if not j: return self.send(404, {"error": "not found"})
-        self.send(200, {k: j[k] for k in ("status", "hosts", "error", "target", "profile")} | {"elapsed": j.get("dur") if j["status"] != "running" else int(time.time() - j["t0"])})
+        self.send(200, {k: j.get(k) for k in ("status", "hosts", "error", "target", "profile", "lookup")} | {"elapsed": j.get("dur") if j["status"] != "running" else int(time.time() - j["t0"])})
     def do_POST(self):
         if not self.host_ok() or not self.origin_ok() or not secrets.compare_digest(self.headers.get("X-Token", ""), TOKEN): return self.send(403, {"error": "forbidden"})
         sm = re.fullmatch(r"/api/stop/([0-9a-f]{8})", self.path)
@@ -260,7 +337,8 @@ class H(BaseHTTPRequestHandler):
             d = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length", 0)), 4096)))
             if self.path == "/api/watch": return self.send(*handle_watch(d))
             if (d.get("profile") not in PROFILES and d.get("profile") != "custom") or d.get("ack") is not True: raise ValueError("Profile/authorization missing")
-            args = custom_args(d.get("options") or {}) if d["profile"] == "custom" else PROFILES[d["profile"]]
+            lookup = d.get("lookup") is True
+            args = scan_args(d["profile"], d.get("options"), lookup)
             demo_mode = bool(d.get("demo"))
             target = re.sub(r"[^\w.\-/ ,]", "", str(d.get("target") or "demo"))[:100] or "demo" if demo_mode else valid_targets(d.get("target"))
             if not demo_mode and not shutil.which("nmap"): raise ValueError("nmap not found. Install it or use demo mode.")
@@ -272,17 +350,17 @@ class H(BaseHTTPRequestHandler):
             return self.send(409, {"error": "A scan is already running. Stop it first."})
         jid = uuid.uuid4().hex[:8]
         JOBS[jid] = {"status": "running", "hosts": [], "error": "", "target": target, "profile": d["profile"],
-                     "id": jid, "ts": time.time(), "t0": time.time(), "demo": demo_mode, "xml": str(Path(tempfile.gettempdir()) / f"meridian-{jid}.xml")}
-        audit(f"scan {jid} target={target} profile={d['profile']} public={any_public(target)} demo={demo_mode}")
+                     "id": jid, "ts": time.time(), "t0": time.time(), "demo": demo_mode, "lookup": lookup and "-sn" not in args, "xml": str(Path(tempfile.gettempdir()) / f"meridian-{jid}.xml")}
+        audit(f"scan {jid} target={target} profile={d['profile']} public={any_public(target)} demo={demo_mode} lookup={lookup and '-sn' not in args}")
         threading.Thread(target=run, args=(JOBS[jid], args), daemon=True).start()
         self.send(200, {"id": jid})
-
+ 
 def find_browser():
     for b in ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable", "brave-browser", "microsoft-edge"):
         if shutil.which(b): return shutil.which(b)
-
+ 
 QUIET = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}  # hide harmless Chromium GPU/D-Bus warnings
-
+ 
 def open_window(url, srv):
     """Native-feeling window: pywebview if installed, else a Chromium-family --app window, else the default browser."""
     if hasattr(os, "geteuid") and os.geteuid() == 0:
@@ -312,7 +390,7 @@ def open_window(url, srv):
     import webbrowser; webbrowser.open(url)
     print("No app-mode browser found; opened default browser. Ctrl+C to quit.")
     threading.Event().wait()
-
+ 
 def uninstall():
     """`meridian --uninstall`: remove the command, the app copy, the menu entry AND saved data. `--keep-data` keeps the data."""
     if hasattr(os, "geteuid") and os.geteuid() == 0:
@@ -330,7 +408,7 @@ def uninstall():
     for t, _ in found: shutil.rmtree(t, ignore_errors=True) if t.is_dir() and not t.is_symlink() else t.unlink(missing_ok=True)
     print("Meridian removed." + (f" Saved data kept in {HIST.parent}." if keep else " Saved data deleted."))
     return 0
-
+ 
 if __name__ == "__main__":
     if "--uninstall" in sys.argv: sys.exit(uninstall())
     load_history(); threading.Thread(target=watcher, daemon=True).start()
