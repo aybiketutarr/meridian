@@ -72,9 +72,18 @@ pre{white-space:pre-wrap;background:var(--bg);border-radius:7px;padding:8px;font
 .mini{background:var(--s2);border:1px solid var(--line);border-radius:7px;padding:4px 10px;margin-right:6px}
 footer{display:flex;align-items:center;gap:16px;padding:0 16px;background:var(--s1);border-top:1px solid var(--line);color:var(--mut);font-size:12.5px}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--mut)}.dot.running{background:var(--warn)}.dot.done{background:var(--good)}.dot.error{background:var(--bad)}
-#toast{position:fixed;right:18px;bottom:44px;background:var(--bad);color:#fff;font-weight:600;padding:10px 16px;border-radius:9px;display:none;max-width:420px}
+#toast{z-index:1000;position:fixed;right:18px;bottom:44px;background:var(--bad);color:#fff;font-weight:600;padding:10px 16px;border-radius:9px;display:none;max-width:420px}
 @media(max-width:1000px){.body{grid-template-columns:1fr;grid-template-rows:auto 1fr}nav{max-height:38vh;border-right:0;border-bottom:1px solid var(--line)}.topo{grid-template-columns:1fr}header{flex-wrap:wrap;height:auto;padding:8px 12px}.app{grid-template-rows:auto 3px 1fr 28px}}
 @media print{body{overflow:visible;background:#fff;color:#000}header,nav,.tabs,footer,.bar{display:none}.app,.body{display:block;height:auto}.pane{overflow:visible}.hide{display:block!important}}
+.lookup{display:flex;gap:9px;margin:12px 8px 0;padding:10px;border:1px solid var(--line);border-radius:10px;font-size:12.5px;line-height:1.45;color:var(--mut);cursor:pointer}
+.lookup:has(input:checked){border-color:var(--acc)}.lookup b{color:var(--tx)}.lookup em{color:var(--med);font-style:normal}.lookup small{display:block;margin-top:3px;font-size:12px}
+.vz{margin:6px 0 0 4px;padding:8px 10px;border-left:2px solid var(--line);font-size:12.5px;line-height:1.5}
+.vh{margin-bottom:4px}.vi{margin:5px 0}.vi a{color:var(--tx)}.vr{margin-top:6px;color:var(--tx)}.vz summary{cursor:pointer;color:var(--acc);margin-top:4px}
+.tag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.04em;padding:1px 6px;border-radius:5px;margin-left:6px;vertical-align:1px}
+.t-kev{background:var(--crit);color:#fff}.t-exp{background:var(--high);color:#111}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:2000}
+.modal .box{background:var(--s1);border:1px solid var(--line);border-radius:14px;padding:22px;max-width:470px;width:calc(100% - 32px);box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.modal h3{margin:0 0 10px}.modal p{margin:0 0 10px;line-height:1.5;font-size:14px}.modal .row{display:flex;gap:10px;justify-content:flex-end;margin-top:14px}
 </style></head><body>
 <svg width="0" height="0" style="position:absolute"><defs>
 <symbol id="bolt" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></symbol>
@@ -100,6 +109,7 @@ footer{display:flex;align-items:center;gap:16px;padding:0 16px;background:var(--
 <div class="bar" id="bar"><b></b></div>
 <div class="body">
 <nav><h2>Scan type</h2><div id="pf"></div><div class="adv hide" id="adv"></div>
+ <label class="lookup"><input type="checkbox" id="lk"><span><b>Check known vulnerabilities</b> <em>(online)</em><small>Looks up each detected software version at vulners.com and shows CVEs, public exploits and what to do. Sends only software names and versions, never IPs. Not used by Host discovery.</small></span></label>
  <label class="ack"><input type="checkbox" id="ack">I own this network or have written permission to scan it.</label></nav>
 <main>
  <div class="top"><div class="kpi" id="k1">0<small>hosts up</small></div><div class="kpi" id="k2">0<small>open ports</small></div><div class="kpi" id="k3">0<small>findings</small></div><div class="kpi" id="k4">0<small>need attention</small></div></div>
@@ -114,32 +124,35 @@ footer{display:flex;align-items:center;gap:16px;padding:0 16px;background:var(--
 <script>
 /* Demo shim: no backend here; /api/* calls are answered in the browser with sample data. */
 (()=>{
+const V=(id,c,e)=>({id,type:"cve",cvss:c,sev:c>=9?"critical":c>=7?"high":c>=4?"medium":"low",kev:false,active:false,exploit:e,epss:null,ai:null,title:"",href:"https://vulners.com/cve/"+id,src:"https://nvd.nist.gov/vuln/detail/"+id,cpe:""});
+const DV={"192.168.1.10:21":[V("CVE-2011-2523",9.8,true)],"192.168.1.10:8080":[V("CVE-2021-42013",9.8,true),V("CVE-2021-41773",7.5,true)],"192.168.1.57:80":[V("CVE-2017-17562",8.1,true)]};
 const D=[["192.168.1.1","gateway.lan","Linux 5.15",[[22,"ssh","OpenSSH 9.2"],[80,"http","lighttpd 1.4"],[443,"https",""]],false],
-["192.168.1.10","nas.lan","Linux 4.x",[[445,"smb","Samba 4.13"],[5000,"http","Synology DSM"]],true],
+["192.168.1.10","nas.lan","Linux 4.x",[[21,"ftp","vsftpd 2.3.4"],[445,"smb","Samba 4.13"],[5000,"http","Synology DSM"],[8080,"http","Apache httpd 2.4.49"]],true],
 ["192.168.1.23","printer.lan","",[[631,"ipp","CUPS 2.4"],[9100,"jetdirect",""],[23,"telnet",""]],false],
 ["192.168.1.42","dev-laptop","Windows 11",[[135,"msrpc",""],[3389,"rdp",""]],false],
 ["192.168.1.57","cam-garage","Linux 3.x",[[554,"rtsp",""],[80,"http","GoAhead 2.5"]],true],
 ["192.168.1.88","","",[],false]];
-const demo=()=>D.map(([i,n,o,ps,v])=>({ip:i,mac:"",name:n,os:o,vuln:v,
+const demo=lk=>D.map(([i,n,o,ps,v])=>({ip:i,mac:"",name:n,os:o,vuln:v,
  hops:i.endsWith(".1")?[]:["192.168.1.1"].concat(/(42|57)$/.test(i)?["192.168.1.254"]:[]),
- ports:ps.map(([p,s,ver])=>({port:p,proto:"tcp",service:s,version:ver,
-  scripts:p===445?[{id:"smb-vuln-ms17-010",out:"VULNERABLE: Remote Code Execution (CVE-2017-0143)"}]:(p===80&&i.endsWith("57"))?[{id:"vulners",out:"CVE-2021-33044 9.8 CVE-2020-25078 7.5"}]:[]}))}));
+ ports:ps.map(([p,s,ver])=>{const hv=/\d/.test(ver),x={port:p,proto:"tcp",service:s,version:ver,ver:hv,cpes:hv?["cpe:/a:demo:"+s]:[],
+  scripts:p===445?[{id:"smb-vuln-ms17-010",out:"VULNERABLE: Remote Code Execution (CVE-2017-0143)"}]:[]},d=lk&&DV[i+":"+p];
+  if(d)x.vulns={mode:"free",total:d.length,cves:d.length,exploits:d.filter(a=>a.exploit).length,kev:0,items:d};return x})}));
 const jobs={},watch=[];let n=0;
 const res=(c,b)=>new Response(JSON.stringify(b),{status:c,headers:{"Content-Type":"application/json"}});
 window.fetch=async(u,o)=>{
  const p=String(u),post=o&&o.method==="POST",b=post?JSON.parse(o.body||"{}"):{};
  if(p==="/api/scan"&&post){
   if(b.ack!==true)return res(400,{error:"Profile/authorization missing"});
-  if(!b.demo)return res(400,{error:"This is a browser-only demo: real scans need nmap and the local server. Click “Try with sample data”."});
+  if(!b.demo)return res(400,{error:"This is a browser-only demo: real scans need nmap and the local server. Click “Sample data”."});
   if([...Object.values(jobs)].some(j=>j.status==="running"))return res(409,{error:"A scan is already running. Stop it first."});
-  const id=(++n).toString(16).padStart(8,"0"),j={status:"running",hosts:[],error:"",target:b.target||"demo",profile:b.profile,t0:Date.now(),ts:Date.now()/1000,dur:0};
+  const id=(++n).toString(16).padStart(8,"0"),j={status:"running",hosts:[],error:"",target:b.target||"demo",profile:b.profile,lookup:!!b.lookup&&b.profile!=="ping",t0:Date.now(),ts:Date.now()/1000,dur:0};
   jobs[id]=j;let k=0;const t=setInterval(()=>{
    if(j.status!=="running"){clearInterval(t);return}
-   j.hosts=demo().slice(0,++k);
+   j.hosts=demo(j.lookup).slice(0,++k);
    if(k>=6){j.status="done";j.dur=Math.round((Date.now()-j.t0)/1000);clearInterval(t)}},1200);
   return res(200,{id});}
  let m;
- if(m=p.match(/^\/api\/scan\/(\w+)$/)){const j=jobs[m[1]];return j?res(200,{status:j.status,hosts:j.hosts,error:j.error,target:j.target,profile:j.profile,elapsed:Math.round((Date.now()-j.t0)/1000)}):res(404,{error:"not found"})}
+ if(m=p.match(/^\/api\/scan\/(\w+)$/)){const j=jobs[m[1]];return j?res(200,{status:j.status,hosts:j.hosts,error:j.error,target:j.target,profile:j.profile,lookup:j.lookup,elapsed:Math.round((Date.now()-j.t0)/1000)}):res(404,{error:"not found"})}
  if(m=p.match(/^\/api\/stop\/(\w+)$/)){if(jobs[m[1]]){jobs[m[1]].status="stopped"}return res(200,{ok:true})}
  if(p==="/api/history")return res(200,Object.entries(jobs).filter(([,j])=>j.status!=="running").map(([id,j])=>({id,target:j.target,profile:j.profile,hosts:j.hosts.length,ts:j.ts,dur:j.dur})).reverse());
  if(p==="/api/alerts")return res(200,{alerts:[],watch:watch.map(w=>({target:w.target,profile:w.profile,every:w.minutes}))});
@@ -149,11 +162,22 @@ window.fetch=async(u,o)=>{
 };
 })();
 </script>
+
 <script>
 const TOKEN="demo",$=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const PF=[["quick","bolt","Quick","Top 100 ports in seconds"],["ping","radar","Host discovery","Who is online, no port scan"],["service","layers","Services","Versions on the top 200 ports"],["full","globe","Full TCP","All 65,535 ports with versions"],["os","cpu","OS detection","Fingerprinting, needs root"],["trace","route","Traceroute map","Real hop-by-hop topology, needs root"],["vuln","shield","Vulnerability","NSE vuln scripts, intrusive","hot"],["custom","sliders","Custom","Timing, ports, scripts"]];
 const RISKY={21:["high","Cleartext FTP","Use SFTP/FTPS or disable."],23:["high","Telnet exposed","Replace with SSH."],69:["high","TFTP exposed","Unauthenticated file transfer."],445:["med","SMB exposed","Restrict to trusted hosts; patch."],139:["med","NetBIOS exposed","Disable if unused."],3389:["med","RDP exposed","Use VPN and NLA."],5900:["med","VNC exposed","Tunnel it or disable."],3306:["med","MySQL reachable","Bind to localhost."],5432:["med","PostgreSQL reachable","Restrict by firewall."],1433:["med","MSSQL reachable","Restrict by firewall."],6379:["high","Redis exposed","No auth by default, bind locally."],27017:["high","MongoDB exposed","Require auth, bind locally."],9200:["high","Elasticsearch exposed","Require auth."],161:["med","SNMP reachable","Use v3, change community."],512:["high","r-services","Legacy, disable."],513:["high","r-services","Legacy, disable."],514:["high","rsh/syslog","Legacy, disable."]};
-const cveF=p=>p.scripts.filter(x=>/CVE-\d{4}-\d+/.test(x.out)&&!/VULNERABLE/i.test(x.out)).map(x=>({sev:"high",t:"CVEs: "+[...new Set(x.out.match(/CVE-\d{4}-\d+/g))].slice(0,5).join(", "),fix:"Update "+(p.service||"service")+" "+(p.version||""),port:p.port}));
+const SV={critical:"crit",high:"high",medium:"med",low:"low"},pl=(n,w)=>n+" "+w+(n===1?"":"s");
+const rec=(p,v)=>{const w=(p.version||p.service||"this service").trim();return v.kev?`Urgent: actively exploited. Update ${w} now or block access to port ${p.port}.`:v.exploits?`Public exploit code exists. Update ${w} to a patched release or restrict access to port ${p.port}.`:`Update ${w} to the latest supported release and review the advisories.`};
+const cveF=p=>{const v=p.vulns,o=[];if(v){const mx=Math.max(0,...v.items.map(i=>i.cvss||0));o.push({sev:v.kev||(v.exploits&&mx>=9)?"crit":v.exploits||mx>=7?"high":mx>=4?"med":"low",t:pl(v.cves||v.total,"known CVE")+(v.exploits?`, ${v.exploits} with public exploit`:"")+(v.kev?`, ${v.kev} actively exploited`:""),fix:rec(p,v),port:p.port})}
+return [...o,...p.scripts.filter(x=>/CVE-\d{4}-\d+/.test(x.out)&&!/VULNERABLE/i.test(x.out)).map(x=>({sev:"high",t:"CVEs: "+[...new Set(x.out.match(/CVE-\d{4}-\d+/g))].slice(0,5).join(", "),fix:"Update "+(p.service||"service")+" "+(p.version||""),port:p.port}))]};
+const url=u=>/^https:\/\//.test(u||"")?esc(u):"#",canLook=p=>p.ver||(p.cpes&&p.cpes.length);
+const vrow=i=>`<div class="vi"><span class="badge b-${SV[i.sev]||"low"}">${esc(i.sev||"info")}</span> <a href="${url(i.href)}" target="_blank" rel="noopener noreferrer"><b>${esc(i.id)}</b></a>${i.cvss!=null?` <span class="mut">CVSS ${i.cvss}</span>`:""}${i.kev?'<span class="tag t-kev">ACTIVELY EXPLOITED</span>':""}${i.exploit?'<span class="tag t-exp">EXPLOIT</span>':""}${i.src?` <a class="mut" href="${url(i.src)}" target="_blank" rel="noopener noreferrer">advisory</a>`:""}${i.title?`<div class="mut">${esc(i.title)}</div>`:""}</div>`;
+const vulnBlock=p=>{if(!last.lookup)return"";const v=p.vulns;if(!v)return`<div class="vz mut">${canLook(p)?"No known vulnerabilities returned for this version.":"No version number detected, so there was nothing to look up."}</div>`;
+ const top=v.items.slice(0,5),more=v.items.slice(5);
+ return`<div class="vz"><div class="vh">${pl(v.total,"known issue")} <span class="mut">· possible, based on the detected version</span>${v.exploits?` · <b>${v.exploits} with public exploit</b>`:""}</div>${top.map(vrow).join("")}${more.length?`<details><summary>Show ${more.length} more</summary>${more.map(vrow).join("")}${v.total>v.items.length?`<div class="mut">Top ${v.items.length} of ${v.total} shown.</div>`:""}</details>`:""}<div class="vr"><b>Recommended:</b> ${esc(rec(p,v))}</div></div>`};
+const PATCHNOTE="Fixed versions are not reported by this lookup. Distributions often patch without changing the version number, so check the advisory link or your package manager (for example apt changelog) before assuming a system is vulnerable.";
+const vulnLines=()=>hosts.flatMap(h=>h.ports.filter(p=>p.vulns).flatMap(p=>p.vulns.items.map(i=>({h,p,i}))));
 const kind=h=>{const n=(h.name+" "+h.os+" "+(h.vendor||"")).toLowerCase(),P=h.ports.map(p=>p.port);return /router|gateway/.test(n)||h.ip.endsWith(".1")?"Router/Gateway":P.includes(9100)||P.includes(631)?"Printer":P.includes(554)?"Camera":P.includes(445)&&P.includes(5000)?"NAS":/windows/.test(n)||P.includes(3389)||P.includes(135)?"Windows PC":P.includes(22)||/linux/.test(n)?"Linux host":P.length?"Device":"Unknown"};
 const W={crit:60,high:35,med:15,low:3},LBL={crit:"Critical",high:"High",med:"Medium",low:"Low"},C=s=>`var(--${({low:"good"})[s]||s})`;
 let sortK="risk",sortD=-1,picked=new Set(),alerts=[],watches=[],seen=0,sevF=new Set(),log=[],prof="quick",hosts=[],sel=null,timer=null,last={},jid=null,opts={timing:4,ports:"",sv:true,os:false,pn:false,scripts:[]},cmp=[];
@@ -191,15 +215,25 @@ const note=ip=>{try{return localStorage.getItem("mr-n-"+ip)||""}catch(e){return"
 document.addEventListener("input",e=>{if(e.target.id==="nt"&&sel)try{localStorage.setItem("mr-n-"+sel,e.target.value)}catch(x){}});
 const toast=(m,ok)=>{const t=$("#toast");t.style.background=ok?"var(--good)":"var(--bad)";t.textContent=m;t.style.display="block";setTimeout(()=>t.style.display="none",m.length>80?10000:5000)};
 const api=(u,b)=>fetch(u,b&&{method:"POST",headers:{"X-Token":TOKEN,"Content-Type":"application/json"},body:JSON.stringify(b)});
+const pref=()=>{try{return localStorage.getItem("mr-lookup")}catch(e){return null}},setPref=v=>{try{localStorage.setItem("mr-lookup",v)}catch(e){}};
+function askLookup(){return new Promise(res=>{const d=document.createElement("div");d.className="modal";
+ d.innerHTML=`<div class="box" role="dialog" aria-modal="true" aria-labelledby="mt"><h3 id="mt">Check known vulnerabilities?</h3><p>Meridian can look up every software version it finds (for example <code>vsftpd 2.3.4</code>) in the Vulners database and show known CVEs, public exploits and what to do about them. It runs automatically on every scan that checks ports.</p><p class="mut">This sends only software names and versions to vulners.com, never IP addresses or hostnames, and the nmap script also downloads fingerprint data from GitHub. Results are based on the version text, so some may not apply to patched systems. You can change this any time in the left panel.</p><div class="row"><button class="ghost" id="lkn">Not now</button><button class="go" id="lky">Turn on</button></div></div>`;
+ document.body.appendChild(d);const fin=v=>{document.removeEventListener("keydown",k);d.remove();res(v)},k=e=>{if(e.key==="Escape")fin(false)};
+ document.addEventListener("keydown",k);$("#lky").onclick=()=>{setPref("1");$("#lk").checked=true;fin(true)};$("#lkn").onclick=()=>fin(false);$("#lky").focus()})}
+const lookupNote=j=>{if(!j.lookup||j.status!=="done")return;const n=j.hosts.reduce((a,h)=>a+h.ports.filter(p=>p.vulns).length,0),c=j.hosts.reduce((a,h)=>a+h.ports.filter(canLook).length,0);
+ log.push(new Date().toLocaleTimeString()+" vulnerability lookup: "+(n?pl(n,"port")+" with known issues":c?"nothing found":"no versions to look up"));
+ if(!n&&c)toast("No vulnerability data returned. Either nothing is known for these versions, or vulners.com could not be reached.",true)};
 async function start(demo){
  if(last.status==="running")return stop();
  if(!$("#ack").checked){toast("Confirm you are authorized to scan this target.");return}
- const body={target:$("#t").value,profile:prof,ack:true,demo,options:opts};let r=await api("/api/scan",body),d=await r.json();
+ const portScan=prof!=="ping"&&!(prof==="custom"&&!opts.sv);let lookup=false;
+ if(portScan){const pf=pref();lookup=demo?pf!=="0":pf===null?await askLookup():pf==="1"}
+ const body={target:$("#t").value,profile:prof,ack:true,demo,options:opts,lookup};let r=await api("/api/scan",body),d=await r.json();
  if(r.status===409&&d.error==="public"){if(!confirm("This target is outside private address ranges. Scan only systems you are authorized to test. Continue?"))return;r=await api("/api/scan",{...body,public_ok:true});d=await r.json()}
  if(!r.ok){toast(d.error);return}
  jid=d.id;log.push(new Date().toLocaleTimeString()+" scan started: "+body.target+" ("+prof+")");hosts=[];sel=null;last={status:"running"};clearInterval(timer);timer=setInterval(poll,1000);poll()}
 const stop=()=>jid&&api("/api/stop/"+jid,{});
-async function poll(){const j=await (await fetch("/api/scan/"+jid)).json();if(j.hosts.length>hosts.length)log.push(new Date().toLocaleTimeString()+" found "+j.hosts[j.hosts.length-1].ip);if(j.status!=="running"&&last.status==="running")log.push(new Date().toLocaleTimeString()+" scan "+j.status+" in "+j.elapsed+" s");last=j;hosts=j.hosts;if(j.status!=="running"){clearInterval(timer);if(j.error)toast(j.error)}render()}
+async function poll(){const j=await (await fetch("/api/scan/"+jid)).json();if(j.hosts.length>hosts.length)log.push(new Date().toLocaleTimeString()+" found "+j.hosts[j.hosts.length-1].ip);if(j.status!=="running"&&last.status==="running")log.push(new Date().toLocaleTimeString()+" scan "+j.status+" in "+j.elapsed+" s");last=j;hosts=j.hosts;if(j.status!=="running"){clearInterval(timer);if(j.error)toast(j.error);else lookupNote(j)}render()}
 $("#go").onclick=()=>start(false);$("#demo").onclick=()=>{$("#ack").checked=true;$("#go").disabled=false;start(true)};
 $("#t").onkeydown=e=>{if(e.key==="Enter"&&!$("#go").disabled)start(false)};$("#q").oninput=render;
 document.addEventListener("keydown",e=>{if(e.key==="Escape")stop();if(e.ctrlKey&&e.key==="Enter")start(false);if(e.key==="Enter"&&e.target.dataset?.ip){sel=e.target.dataset.ip;render()}});
@@ -243,7 +277,7 @@ function render(){
  const sv={};hosts.forEach(h=>h.ports.forEach(p=>sv[p.service||"unknown"]=(sv[p.service||"unknown"]||0)+1));const top=Object.entries(sv).sort((a,b)=>b[1]-a[1]).slice(0,5),mx=top[0]?.[1]||1;
  $("#ov").innerHTML=`<div style="display:flex;gap:16px;align-items:center"><svg viewBox="0 0 120 120" width="108" height="108" role="img" aria-label="Risk distribution"><circle cx="60" cy="60" r="45" fill="none" stroke="var(--line)" stroke-width="12"/>${hosts.length?arc(rc.crit,"var(--crit)")+arc(rc.high,"var(--high)")+arc(rc.med,"var(--med)")+arc(rc.low,"var(--good)"):""}<text x="60" y="66" text-anchor="middle" font-size="24" font-weight="700" fill="var(--tx)">${posture??"–"}</text></svg><div><b title="Heuristic based on exposed services and script findings">Security posture</b><div class="mut">${posture==null?"No data yet":posture>=80?"Good":posture>=50?"Needs work":"Poor"}<br>${rc.crit} critical · ${rc.high} high · ${rc.med} medium · ${rc.low} low</div></div></div><h4 style="margin:14px 0 6px">Top services</h4>${top.map(([n,c])=>`<div style="display:flex;gap:8px;align-items:center;margin:4px 0"><span style="width:84px" class="mut">${esc(n)}</span><i style="height:8px;border-radius:4px;background:linear-gradient(90deg,var(--acc),var(--acc2));width:${c/mx*110}px"></i><span class="ip">${c}</span></div>`).join("")||"<div class=mut>No services yet</div>"}${alerts.length?`<h4 style="margin:14px 0 6px;color:var(--high)">Watch alerts</h4><div style="font:12px var(--mono);max-height:90px;overflow:auto">${alerts.slice(-5).reverse().map(esc).join("<br>")}</div>`:""}<h4 style="margin:14px 0 6px">Activity</h4><div class="mut" style="font:12px var(--mono);max-height:110px;overflow:auto">${log.slice(-8).reverse().map(esc).join("<br>")||"No activity yet"}</div>`;
  const h=hosts.find(x=>x.ip===sel);
- if(document.activeElement?.id!=="nt")$("#det").innerHTML=h?`<div class="ip" style="font-size:17px;font-weight:600">${esc(h.ip)}</div><div class="mut">${kind(h)} · ${esc(h.name)} ${esc(h.os)}${h.mac?" · "+esc(h.mac)+" "+esc(h.vendor||""):""}</div><div style="--c:${C(risk(h))};margin:8px 0"><span class="badge b-${risk(h)}">${LBL[risk(h)]} · ${score(h)}/100</span><div class="meter" style="width:100%"><i style="width:${score(h)}%"></i></div></div><textarea id="nt" class="find" rows="2" style="max-width:none" placeholder="Notes about this host" aria-label="Notes">${esc(note(h.ip))}</textarea>${finds(h).map(f=>`<div class="fi" style="--c:${C(f.sev)}"><span class="badge b-${f.sev}">${LBL[f.sev]}</span><b>${esc(f.t)}</b><div class="mut">${esc(f.fix)}</div></div>`).join("")}<h4>Open ports</h4>${h.ports.map(p=>`<div style="margin:8px 0"><span class="chip">${p.port}/${p.proto}</span>${esc(p.service)} <span class="mut">${esc(p.version)}</span>${p.scripts.map(x=>`<pre>${esc(x.id)}: ${esc(x.out)}</pre>`).join("")}</div>`).join("")||"<p class=mut>No open ports found.</p>"}`:`<div class="empty">Select a host on the map to see its ports and findings.</div>`;
+ if(document.activeElement?.id!=="nt")$("#det").innerHTML=h?`<div class="ip" style="font-size:17px;font-weight:600">${esc(h.ip)}</div><div class="mut">${kind(h)} · ${esc(h.name)} ${esc(h.os)}${h.mac?" · "+esc(h.mac)+" "+esc(h.vendor||""):""}</div><div style="--c:${C(risk(h))};margin:8px 0"><span class="badge b-${risk(h)}">${LBL[risk(h)]} · ${score(h)}/100</span><div class="meter" style="width:100%"><i style="width:${score(h)}%"></i></div></div><textarea id="nt" class="find" rows="2" style="max-width:none" placeholder="Notes about this host" aria-label="Notes">${esc(note(h.ip))}</textarea>${finds(h).map(f=>`<div class="fi" style="--c:${C(f.sev)}"><span class="badge b-${f.sev}">${LBL[f.sev]}</span><b>${esc(f.t)}</b><div class="mut">${esc(f.fix)}</div></div>`).join("")}<h4>Open ports</h4>${h.ports.map(p=>`<div style="margin:8px 0"><span class="chip">${p.port}/${p.proto}</span>${esc(p.service)} <span class="mut">${esc(p.version)}</span>${p.scripts.map(x=>`<pre>${esc(x.id)}: ${esc(x.out)}</pre>`).join("")}${vulnBlock(p)}</div>`).join("")||"<p class=mut>No open ports found.</p>"}${h.ports.some(p=>p.vulns)?`<p class="mut" style="font-size:12px">${PATCHNOTE}</p>`:""}`:`<div class="empty">Select a host on the map to see its ports and findings.</div>`;
  const q=$("#q").value.toLowerCase(),ipn=x=>x.split(".").reduce((n,p)=>n*256+(+p||0),0),K={risk:h=>score(h),ip:h=>ipn(h.ip),ports:h=>h.ports.length,os:h=>h.os};
  const f=hosts.filter(h=>(!q||JSON.stringify([h.ip,h.name,h.os,h.ports.map(p=>[p.port,p.service])]).toLowerCase().includes(q))&&(!sevF.size||sevF.has(risk(h)))).sort((a,b)=>{const x=K[sortK](a),y=K[sortK](b);return(x>y?1:x<y?-1:0)*sortD});
  const th=(k,t)=>`<th><button class="mini" data-sk="${k}">${t}${sortK===k?(sortD>0?" ▲":" ▼"):""}</button></th>`;
@@ -253,11 +287,11 @@ function render(){
 }
 document.addEventListener("click",e=>{const pk=e.target.dataset.pk,sk=e.target.dataset.sk;if(pk){picked.has(pk)?picked.delete(pk):picked.add(pk);render();return}if(sk){sortD=sortK===sk?-sortD:(sk==="ip"||sk==="os"?1:-1);sortK=sk;render();return}if(e.target.dataset.clr){sevF.clear();render();return}if(e.target.id==="scs"){$("#t").value=[...picked].join(" ");prof="service";$$(".pf").forEach(x=>x.setAttribute("aria-pressed",x.dataset.p==="service"));$("#adv").classList.add("hide");start(false);return}const sv=e.target.closest("[data-sv]");if(sv){const k=sv.dataset.sv;sevF.has(k)?sevF.delete(k):sevF.add(k);render()}const n=e.target.closest("[data-ip]");if(n){sel=n.dataset.ip;render()}$("#mn").classList.toggle("open",!!e.target.closest("#exb")&&!$("#exb").disabled)});
 const dl=(n,t,m)=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([t],{type:m}));a.download=n;a.click()};
-const rows=()=>hosts.flatMap(h=>h.ports.length?h.ports.map(p=>[h.ip,h.name,h.os,p.port,p.proto,p.service,p.version,score(h)]):[[h.ip,h.name,h.os,"","","","",score(h)]]);
+const rows=()=>hosts.flatMap(h=>h.ports.length?h.ports.map(p=>[h.ip,h.name,h.os,p.port,p.proto,p.service,p.version,score(h),p.vulns?p.vulns.cves||p.vulns.total:0,p.vulns?p.vulns.exploits:0,p.vulns?p.vulns.kev:0]):[[h.ip,h.name,h.os,"","","","",score(h),"","",""]]);
 const EX={json:()=>dl("meridian.json",JSON.stringify({target:last.target,profile:last.profile,hosts},null,2),"application/json"),
- csv:()=>dl("meridian.csv",[["ip","hostname","os","port","proto","service","version","risk"],...rows()].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n"),"text/csv"),
- md:()=>dl("meridian.md",`# Scan report\nTarget: ${last.target} · Profile: ${last.profile}\n\n| Host | OS | Ports | Risk |\n|---|---|---|---|\n`+hosts.map(h=>`| ${h.ip} ${h.name} | ${h.os} | ${h.ports.map(p=>p.port+"/"+p.service).join(", ")} | ${score(h)} |`).join("\n")+`\n\n## Findings\n`+hosts.flatMap(h=>finds(h).map(f=>`- **${f.sev}** ${f.t} (${h.ip}:${f.port}): ${f.fix}`)).join("\n"),"text/markdown"),
- html:()=>dl("meridian.html",`<!doctype html><meta charset=utf-8><title>Scan report</title><style>.p{padding:2px 9px;border-radius:99px;font-size:12px;font-weight:700;color:#fff}.crit{background:#ff2d55}.high{background:#ff8a3d}.med{background:#d99a00}.low{background:#10b981}body{font:15px system-ui;max-width:920px;margin:30px auto;color:#123}td,th{border:1px solid #cdd;padding:6px;text-align:left}table{border-collapse:collapse;width:100%}</style><h1>Scan report</h1><p>Target ${esc(last.target)}, profile ${esc(last.profile)}, ${hosts.length} hosts</p><table><tr><th>Host<th>OS<th>Ports<th>Risk</tr>${hosts.map(h=>`<tr><td>${esc(h.ip)} ${esc(h.name)}<td>${esc(h.os)}<td>${h.ports.map(p=>p.port+"/"+esc(p.service)).join(", ")}<td><span class="p ${risk(h)}">${LBL[risk(h)]} ${score(h)}</span>`).join("")}</table><h2>Findings</h2><ul>${hosts.flatMap(h=>finds(h).map(f=>`<li><span class="p ${f.sev}">${LBL[f.sev]}</span> ${esc(f.t)} (${esc(h.ip)}:${f.port}) ${esc(f.fix)}`)).join("")}</ul>`,"text/html"),pdf:()=>window.print(),xml:()=>fetch("/api/xml/"+jid).then(r=>r.ok?r.text().then(t=>dl("meridian.xml",t,"application/xml")):toast("Raw XML is kept only for scans run in this session.")),ips:()=>navigator.clipboard.writeText(hosts.map(h=>h.ip).join("\n")).then(()=>toast("IP list copied",true))};
+ csv:()=>dl("meridian.csv",[["ip","hostname","os","port","proto","service","version","risk","cves","exploits","kev"],...rows()].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n"),"text/csv"),
+ md:()=>dl("meridian.md",`# Scan report\nTarget: ${last.target} · Profile: ${last.profile}\n\n| Host | OS | Ports | Risk |\n|---|---|---|---|\n`+hosts.map(h=>`| ${h.ip} ${h.name} | ${h.os} | ${h.ports.map(p=>p.port+"/"+p.service).join(", ")} | ${score(h)} |`).join("\n")+`\n\n## Findings\n`+hosts.flatMap(h=>finds(h).map(f=>`- **${f.sev}** ${f.t} (${h.ip}:${f.port}): ${f.fix}`)).join("\n")+"\n\n## Known vulnerabilities (possible, based on detected versions)\n"+vulnLines().map(({h,p,i})=>`- ${h.ip}:${p.port} ${p.version}: ${i.id}${i.cvss!=null?" (CVSS "+i.cvss+")":""}${i.exploit?" [public exploit]":""}${i.kev?" [actively exploited]":""}`).join("\n"),"text/markdown"),
+ html:()=>dl("meridian.html",`<!doctype html><meta charset=utf-8><title>Scan report</title><style>.p{padding:2px 9px;border-radius:99px;font-size:12px;font-weight:700;color:#fff}.crit{background:#ff2d55}.high{background:#ff8a3d}.med{background:#d99a00}.low{background:#10b981}body{font:15px system-ui;max-width:920px;margin:30px auto;color:#123}td,th{border:1px solid #cdd;padding:6px;text-align:left}table{border-collapse:collapse;width:100%}</style><h1>Scan report</h1><p>Target ${esc(last.target)}, profile ${esc(last.profile)}, ${hosts.length} hosts</p><table><tr><th>Host<th>OS<th>Ports<th>Risk</tr>${hosts.map(h=>`<tr><td>${esc(h.ip)} ${esc(h.name)}<td>${esc(h.os)}<td>${h.ports.map(p=>p.port+"/"+esc(p.service)).join(", ")}<td><span class="p ${risk(h)}">${LBL[risk(h)]} ${score(h)}</span>`).join("")}</table><h2>Findings</h2><ul>${hosts.flatMap(h=>finds(h).map(f=>`<li><span class="p ${f.sev}">${LBL[f.sev]}</span> ${esc(f.t)} (${esc(h.ip)}:${f.port}) ${esc(f.fix)}`)).join("")}</ul><h2>Known vulnerabilities (possible, based on detected versions)</h2><ul>${vulnLines().map(({h,p,i})=>`<li>${esc(h.ip)}:${p.port} ${esc(p.version)}: <a href="${url(i.href)}">${esc(i.id)}</a>${i.cvss!=null?" CVSS "+i.cvss:""}${i.exploit?" [public exploit]":""}${i.kev?" [actively exploited]":""}`).join("")}</ul>`,"text/html"),pdf:()=>window.print(),xml:()=>fetch("/api/xml/"+jid).then(r=>r.ok?r.text().then(t=>dl("meridian.xml",t,"application/xml")):toast("Raw XML is kept only for scans run in this session.")),ips:()=>navigator.clipboard.writeText(hosts.map(h=>h.ip).join("\n")).then(()=>toast("IP list copied",true))};
 document.addEventListener("keydown",e=>{if(e.key==="Escape")$("#mn").classList.remove("open")});
 $("#mn").querySelector("div").onclick=e=>{const f=e.target.dataset.f;if(f){EX[f]();$("#mn").classList.remove("open")}};
 $("#wi").onchange=async e=>{if(!$("#ack").checked){toast("Confirm authorization first.");e.target.value="0";return}
@@ -269,6 +303,7 @@ setInterval(pollAl,20000);pollAl();
 $("#auto").onclick=async()=>{const d=await (await fetch("/api/net")).json();$("#t").value=d.cidr};
 fetch("/api/history").then(r=>r.json()).then(l=>{$("#rt").innerHTML=[...new Set(l.map(x=>x.target))].map(t=>`<option value="${esc(t)}">`).join("")}).catch(()=>{});
 render();
+{const lk=$("#lk");lk.checked=pref()==="1";lk.onchange=()=>setPref(lk.checked?"1":"0")}
 (async()=>{try{const d=await (await fetch("/api/net")).json();if(d.cidr&&$("#t").value==="192.168.1.0/24")$("#t").value=d.cidr;
 if(d.root===false)toast("Not running as root: host discovery can miss devices (no ARP). For full LAN results restart with: sudo -E \"$(command -v meridian)\"",true)}catch(e){}})();
 </script></body></html>
