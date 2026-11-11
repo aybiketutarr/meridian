@@ -281,6 +281,8 @@ def find_browser():
     for b in ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable", "brave-browser", "microsoft-edge"):
         if shutil.which(b): return shutil.which(b)
 
+QUIET = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}  # hide harmless Chromium GPU/D-Bus warnings
+
 def open_window(url, srv):
     """Native-feeling window: pywebview if installed, else a Chromium-family --app window, else the default browser."""
     if hasattr(os, "geteuid") and os.geteuid() == 0:
@@ -290,7 +292,7 @@ def open_window(url, srv):
             prof = str(Path(tempfile.gettempdir()) / f"meridian-ui-{uuid.uuid4().hex[:8]}")
             keep = "DISPLAY,XAUTHORITY,WAYLAND_DISPLAY,XDG_RUNTIME_DIR,DBUS_SESSION_BUS_ADDRESS"
             r = subprocess.run(["sudo", "-u", user, f"--preserve-env={keep}", b, f"--app={url}", f"--user-data-dir={prof}",
-                                "--window-size=1360,860", "--no-first-run", "--disable-extensions"])
+                                "--window-size=1360,860", "--no-first-run", "--disable-extensions", "--log-level=3"], **QUIET)
             shutil.rmtree(prof, ignore_errors=True)
             if r.returncode == 0: return
         print(f"Could not open a window as root. Open {url} in your normal browser. Ctrl+C to quit.")
@@ -304,7 +306,7 @@ def open_window(url, srv):
     b = find_browser()
     if b:
         prof = tempfile.mkdtemp(prefix="meridian-ui-")
-        subprocess.run([b, f"--app={url}", f"--user-data-dir={prof}", "--window-size=1360,860", "--no-first-run", "--disable-extensions"])
+        subprocess.run([b, f"--app={url}", f"--user-data-dir={prof}", "--window-size=1360,860", "--no-first-run", "--disable-extensions", "--log-level=3"], **QUIET)
         shutil.rmtree(prof, ignore_errors=True); return
     import webbrowser; webbrowser.open(url)
     print("No app-mode browser found; opened default browser. Ctrl+C to quit.")
