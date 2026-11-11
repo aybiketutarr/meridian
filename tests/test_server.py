@@ -174,5 +174,69 @@ class RootWindow(unittest.TestCase):
         run.assert_not_called(); ev.return_value.wait.assert_called()
 
 
+class Uninstall(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(); self.home = Path(self.tmp.name)
+        for p in (".local/share/meridian-app/server.py", ".local/bin/meridian", ".local/share/applications/meridian.desktop",
+                  ".local/share/meridian/history.json", ".local/share/meridian/audit.log", ".local/share/meridian/browser-profile/Default/x"):
+            f = self.home / p; f.parent.mkdir(parents=True, exist_ok=True); f.write_text("x")
+        self.patches = [mock.patch.dict(server.os.environ, {"HOME": str(self.home)}),
+                        mock.patch.object(server, "HIST", self.home / ".local/share/meridian/history.json"),
+                        mock.patch.object(server.os, "geteuid", return_value=1000),
+                        mock.patch.object(server.sys, "argv", ["meridian", "--uninstall"])]
+        for p in self.patches: p.start()
+        server.os.environ.pop("XDG_DATA_HOME", None)
+
+    def tearDown(self):
+        for p in reversed(self.patches): p.stop()
+        self.tmp.cleanup()
+
+    def gone(self, rel): return not (self.home / rel).exists()
+
+    def test_removes_app_and_saved_data(self):
+        with mock.patch("builtins.input", return_value="y"): self.assertEqual(server.uninstall(), 0)
+        for rel in (".local/share/meridian-app", ".local/bin/meridian", ".local/share/applications/meridian.desktop", ".local/share/meridian"):
+            self.assertTrue(self.gone(rel), rel)
+
+    def test_keep_data_flag(self):
+        server.sys.argv.append("--keep-data")
+        with mock.patch("builtins.input", return_value="y"): self.assertEqual(server.uninstall(), 0)
+        self.assertTrue(self.gone(".local/bin/meridian")); self.assertTrue(self.gone(".local/share/meridian-app"))
+        self.assertFalse(self.gone(".local/share/meridian/history.json")); self.assertFalse(self.gone(".local/share/meridian/audit.log"))
+
+    def test_yes_flag_skips_prompt(self):
+        server.sys.argv.append("--yes")
+        with mock.patch("builtins.input", side_effect=AssertionError("must not prompt")): self.assertEqual(server.uninstall(), 0)
+        self.assertTrue(self.gone(".local/share/meridian"))
+
+    def test_cancel_keeps_everything(self):
+        with mock.patch("builtins.input", return_value="n"): self.assertEqual(server.uninstall(), 1)
+        self.assertFalse(self.gone(".local/bin/meridian")); self.assertFalse(self.gone(".local/share/meridian/history.json"))
+
+    def test_refuses_under_root(self):
+        with mock.patch.object(server.os, "geteuid", return_value=0): self.assertEqual(server.uninstall(), 1)
+        self.assertFalse(self.gone(".local/bin/meridian"))
+
+    def test_nothing_installed(self):
+        import shutil
+        for rel in (".local/share/meridian-app", ".local/bin/meridian", ".local/share/applications/meridian.desktop", ".local/share/meridian"):
+            f = self.home / rel; shutil.rmtree(f) if f.is_dir() else f.unlink()
+        self.assertEqual(server.uninstall(), 0)
+
+
+class PersistentProfile(unittest.TestCase):
+    def test_window_uses_persistent_profile_dir(self):
+        with tempfile.TemporaryDirectory() as d, \
+             mock.patch.object(server, "HIST", Path(d) / "meridian" / "history.json"), \
+             mock.patch.object(server.os, "geteuid", return_value=1000), \
+             mock.patch.dict(sys.modules, {"webview": None}), \
+             mock.patch.object(server, "find_browser", return_value="/usr/bin/chromium"), \
+             mock.patch.object(server.subprocess, "run") as run:
+            server.open_window("http://127.0.0.1:8765", None)
+            prof = Path(d) / "meridian" / "browser-profile"
+            self.assertIn(f"--user-data-dir={prof}", run.call_args[0][0])
+            self.assertTrue(prof.is_dir())   # not deleted after the window closes
+
+
 if __name__ == "__main__":
     unittest.main()
