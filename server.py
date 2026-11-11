@@ -305,16 +305,37 @@ def open_window(url, srv):
         pass
     b = find_browser()
     if b:
-        prof = tempfile.mkdtemp(prefix="meridian-ui-")
+        prof = HIST.parent / "browser-profile"   # persistent, so theme, presets and notes survive restarts
+        prof.mkdir(parents=True, exist_ok=True, mode=0o700)
         subprocess.run([b, f"--app={url}", f"--user-data-dir={prof}", "--window-size=1360,860", "--no-first-run", "--disable-extensions", "--log-level=3"], **QUIET)
-        shutil.rmtree(prof, ignore_errors=True); return
+        return
     import webbrowser; webbrowser.open(url)
     print("No app-mode browser found; opened default browser. Ctrl+C to quit.")
     threading.Event().wait()
 
+def uninstall():
+    """`meridian --uninstall`: remove the command, the app copy, the menu entry AND saved data. `--keep-data` keeps the data."""
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        print("Run this as your normal user, without sudo."); return 1
+    share = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+    app = [share / "meridian-app", Path.home() / ".local" / "bin" / "meridian", share / "applications" / "meridian.desktop"]
+    keep = "--keep-data" in sys.argv
+    saved = [] if keep else [HIST.parent]
+    found = [(t, "application") for t in app if t.exists() or t.is_symlink()] + [(t, "saved data: scan history, audit log, browser profile") for t in saved if t.exists()]
+    if not found: print("Meridian is not installed (nothing to remove)."); return 0
+    print("This will remove:"); [print(f"  {t}   ({kind})") for t, kind in found]
+    if keep: print(f"  (keeping saved data in {HIST.parent})")
+    if "--yes" not in sys.argv and input("Remove Meridian? [y/N] ").strip().lower() not in ("y", "yes"):
+        print("Cancelled."); return 1
+    for t, _ in found: shutil.rmtree(t, ignore_errors=True) if t.is_dir() and not t.is_symlink() else t.unlink(missing_ok=True)
+    print("Meridian removed." + (f" Saved data kept in {HIST.parent}." if keep else " Saved data deleted."))
+    return 0
+
 if __name__ == "__main__":
+    if "--uninstall" in sys.argv: sys.exit(uninstall())
     load_history(); threading.Thread(target=watcher, daemon=True).start()
-    srv = ThreadingHTTPServer(("127.0.0.1", int(os.environ.get("MERIDIAN_PORT", 0))), H)
+    try: srv = ThreadingHTTPServer(("127.0.0.1", int(os.environ.get("MERIDIAN_PORT", 8765))), H)   # fixed port keeps browser storage (theme, notes) stable
+    except OSError: srv = ThreadingHTTPServer(("127.0.0.1", 0), H)                                      # busy: any free port
     PORT = srv.server_address[1]
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     url = f"http://127.0.0.1:{PORT}"
