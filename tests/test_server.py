@@ -107,6 +107,10 @@ class Http(unittest.TestCase):
             self.assertIn("default-src 'self'", r.headers["Content-Security-Policy"])
             self.assertEqual(r.headers["X-Frame-Options"], "DENY")
  
+    def test_index_shows_version(self):
+        with urllib.request.urlopen(self.base + "/") as r: html = r.read().decode()
+        self.assertIn(f"v{server.VERSION}", html); self.assertNotIn("__VERSION__", html)
+ 
     def test_bad_host_blocked(self):
         self.assertEqual(self.req("/api/history", host="evil.com")[0], 403)
  
@@ -405,6 +409,29 @@ class SaveExport(unittest.TestCase):
              mock.patch.object(server.os, "chown") as chown:
             f = server.save_export({"name": "a.json", "data": "x"})["path"]
         chown.assert_called_once_with(Path(f), 1234, 1235)
+ 
+ 
+class Version(unittest.TestCase):
+    def run_cli(self, *args):
+        import subprocess
+        return subprocess.run([sys.executable, str(Path(server.__file__)), *args], capture_output=True, text=True, timeout=20)
+ 
+    def test_version_is_semver(self):
+        self.assertRegex(server.VERSION, r"^\d+\.\d+\.\d+$")
+ 
+    def test_version_flags(self):
+        for flag in ("--version", "-V"):
+            r = self.run_cli(flag); self.assertEqual((r.returncode, r.stdout), (0, f"Meridian {server.VERSION}\n"), flag)
+ 
+    def test_help_lists_every_option(self):
+        out = self.run_cli("--help").stdout
+        for word in (server.VERSION, "--serve", "--version", "--uninstall", "--keep-data", "--yes", "MERIDIAN_PORT"): self.assertIn(word, out)
+ 
+    def test_version_flag_has_no_side_effects(self):
+        with tempfile.TemporaryDirectory() as home:
+            import subprocess
+            subprocess.run([sys.executable, server.__file__, "--version"], env={"HOME": home, "PATH": "/usr/bin:/bin"}, capture_output=True, timeout=20)
+            self.assertEqual(list(Path(home).iterdir()), [])        # no history, no audit log, no folders
  
  
 if __name__ == "__main__":
