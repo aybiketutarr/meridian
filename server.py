@@ -149,6 +149,38 @@ def valid_targets(t):
  
 def any_public(t): return any(is_public(x) for x in t.split())
  
+SAVE_EXT = {".json", ".csv", ".md", ".html", ".xml", ".txt"}
+MAX_SAVE = 8 * 1024 * 1024
+ 
+def downloads_dir():
+    """The user's download folder (XDG setting, else ~/Downloads), created if missing. Always inside the home directory."""
+    home, d = Path.home(), None
+    try:
+        for line in (home / ".config" / "user-dirs.dirs").read_text().splitlines():
+            if line.startswith("XDG_DOWNLOAD_DIR="): d = Path(os.path.expandvars(line.split("=", 1)[1].strip().strip('"')))
+    except OSError: pass
+    if d is None or home not in d.resolve().parents: d = home / "Downloads"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+ 
+def save_export(d):
+    """Write an export straight into the download folder, so no browser download window is needed. Returns {"path": ...}."""
+    name = str(d.get("name", "")); ext = Path(name).suffix.lower(); data = d.get("data")
+    if ext not in SAVE_EXT: raise ValueError("Unsupported file type")
+    if not isinstance(data, str) or len(data) > MAX_SAVE: raise ValueError("Export is empty or too large")
+    stem = re.sub(r"[^A-Za-z0-9._-]", "_", Path(name).stem)[:40].strip("._") or "meridian"
+    base, k = f"{stem}-{time.strftime('%Y%m%d-%H%M%S')}", 0
+    folder = downloads_dir()
+    while True:
+        dest = folder / f"{base}{'-' + str(k) if k else ''}{ext}"
+        try: fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600); break
+        except FileExistsError: k += 1
+    with os.fdopen(fd, "w", encoding="utf-8") as f: f.write(data)
+    if hasattr(os, "geteuid") and os.geteuid() == 0 and os.environ.get("SUDO_UID", "").isdigit():
+        os.chown(dest, int(os.environ["SUDO_UID"]), int(os.environ.get("SUDO_GID") or os.environ["SUDO_UID"]))   # started with sudo: give the file to the real user
+    audit(f"export saved {dest.name} ({len(data)} chars)")
+    return {"path": str(dest)}
+ 
 def local_cidr():
     """Best-effort guess of the local /24 (no packets are sent by this UDP connect)."""
     try:
@@ -328,6 +360,13 @@ class H(BaseHTTPRequestHandler):
         self.send(200, {k: j.get(k) for k in ("status", "hosts", "error", "target", "profile", "lookup")} | {"elapsed": j.get("dur") if j["status"] != "running" else int(time.time() - j["t0"])})
     def do_POST(self):
         if not self.host_ok() or not self.origin_ok() or not secrets.compare_digest(self.headers.get("X-Token", ""), TOKEN): return self.send(403, {"error": "forbidden"})
+        if self.path == "/api/save":
+            try:
+                n = int(self.headers.get("Content-Length", 0))
+                if not 0 < n <= 12_000_000: raise ValueError("Export is empty or too large")
+                return self.send(200, save_export(json.loads(self.rfile.read(n))))
+            except (ValueError, TypeError, OSError, json.JSONDecodeError) as e:
+                return self.send(400, {"error": str(e)})
         sm = re.fullmatch(r"/api/stop/([0-9a-f]{8})", self.path)
         if sm and sm.group(1) in JOBS:
             j = JOBS[sm.group(1)]; j["status"] = "stopped"
