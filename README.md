@@ -76,6 +76,13 @@ Type your password when asked. Meridian is still opened as **your** user, only t
 ### Using a VirtualBox VM?
 Set **Settings -> Network -> Adapter 1 -> Attached to: Bridged Adapter** and pick the network card your PC is really using (Wi-Fi or Ethernet). On Wi-Fi also set **Advanced -> Promiscuous Mode: Allow All**. With NAT, the VM only sees its own virtual network.
  
+### Check the version and options
+```sh
+meridian --version
+meridian --help
+```
+The version is also shown at the bottom right of the app window.
+ 
 ### Update
 ```sh
 cd ~/meridian
@@ -156,6 +163,8 @@ Risk scores are heuristics from exposed services and NSE output, not a substitut
 python3 -m unittest discover -s tests -v
 ```
 CI runs the same command on Python 3.10 - 3.13 (`.github/workflows/tests.yml`).
+ 
+Releases: the version number lives in `VERSION` at the top of `server.py`. Bump it for every release and tag the same number on GitHub (for example `v0.2.0`).
  
 Layout: `server.py` (HTTP server, nmap runner, XML parser, validation), `index.html` (single-file UI), `docs/` (browser-only demo), `tests/`, `install.sh`, `Dockerfile`.
  
