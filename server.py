@@ -6,6 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
  
 PORT = 0  # chosen at start-up (free port)
+VERSION = "0.2.0"   # bump for every release and tag the same number on GitHub (v0.2.0)
 TOKEN = secrets.token_urlsafe(16)
 JOBS = {}
 # Whitelisted profiles: the user never supplies raw nmap flags (no argument injection).
@@ -345,7 +346,7 @@ class H(BaseHTTPRequestHandler):
     def do_GET(self):
         if not self.host_ok(): return self.send(403, {"error": "bad host"})
         if self.path == "/":
-            html = (Path(__file__).parent / "index.html").read_text().replace("__TOKEN__", TOKEN)
+            html = (Path(__file__).parent / "index.html").read_text().replace("__TOKEN__", TOKEN).replace("__VERSION__", VERSION)
             return self.send(200, html.encode(), "text/html; charset=utf-8")
         xm = re.fullmatch(r"/api/xml/([0-9a-f]{8})", self.path)
         if xm and xm.group(1) in JOBS and JOBS[xm.group(1)]["xml"] and Path(JOBS[xm.group(1)]["xml"]).exists():
@@ -448,7 +449,22 @@ def uninstall():
     print("Meridian removed." + (f" Saved data kept in {HIST.parent}." if keep else " Saved data deleted."))
     return 0
  
+HELP = f"""Meridian {VERSION} - network scanner UI on top of nmap
+ 
+Usage: meridian [option]
+  (no option)      open the app window
+  --serve          run without a window and print the URL to open yourself
+  --version, -V    print the version and exit
+  --uninstall      remove the app AND your saved data
+                   (--keep-data keeps the data, --yes skips the question)
+  --help, -h       show this help
+ 
+Environment: MERIDIAN_PORT=8765 (preferred port; any free port is used if it is busy)
+Scan only networks you own or have permission to test."""
+ 
 if __name__ == "__main__":
+    if "--version" in sys.argv or "-V" in sys.argv: print(f"Meridian {VERSION}"); sys.exit(0)
+    if "--help" in sys.argv or "-h" in sys.argv: print(HELP); sys.exit(0)
     if "--uninstall" in sys.argv: sys.exit(uninstall())
     load_history(); threading.Thread(target=watcher, daemon=True).start()
     try: srv = ThreadingHTTPServer(("127.0.0.1", int(os.environ.get("MERIDIAN_PORT", 8765))), H)   # fixed port keeps browser storage (theme, notes) stable
@@ -456,7 +472,7 @@ if __name__ == "__main__":
     PORT = srv.server_address[1]
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     url = f"http://127.0.0.1:{PORT}"
-    print(f"Meridian {url}  (nmap: {shutil.which('nmap') or 'NOT FOUND, sample-data mode only'})")
+    print(f"Meridian {VERSION} {url}  (nmap: {shutil.which('nmap') or 'NOT FOUND, sample-data mode only'})")
     if hasattr(os, "geteuid") and os.geteuid() == 0:
         print("Warning: running as root. Keep Meridian on localhost and scan only authorized targets.")
     try:
