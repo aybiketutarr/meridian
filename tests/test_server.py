@@ -171,6 +171,18 @@ class Http(unittest.TestCase):
         c, d, args = self.post_scan({"target": "192.168.1.5", "lookup": "yes"})
         self.assertNotIn("vulners", " ".join(args))
  
+    def test_api_save_over_http(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(server.os.environ, {"HOME": d}):
+            c, r = self.req("/api/save", {"name": "meridian.html", "data": "<p>hi</p>"})
+            self.assertEqual(c, 200); self.assertEqual(Path(r["path"]).read_text(), "<p>hi</p>")
+            self.assertEqual(self.req("/api/save", {"name": "x.py", "data": "print(1)"})[0], 400)
+            self.assertEqual(self.req("/api/save", {"name": "a.json", "data": "x"}, token=False)[0], 403)
+ 
+    def test_api_save_rejects_oversized_body(self):
+        try: code = self.req("/api/save", {"name": "a.json", "data": "x" * 13_000_000})[0]
+        except urllib.error.URLError: code = 400      # the server refuses without reading the body and closes the connection
+        self.assertEqual(code, 400)
+ 
     def test_unknown_profile(self):
         self.assertEqual(self.req("/api/scan", {"demo": True, "profile": "rm -rf", "ack": True})[0], 400)
  
@@ -350,6 +362,49 @@ def ET_vulners(rows):
         f"<table><elem key='id'>{i}</elem><elem key='cvss'>{c}</elem><elem key='is_exploit'>{e}</elem><elem key='kev'>{k}</elem>"
         + (f"<elem key='epss'>{p}</elem>" if p else "") + "</table>" for i, c, e, k, p in rows) + "</table></script>"
     return server.parse_vulners(ET.fromstring(xml))
+ 
+ 
+class SaveExport(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(); self.home = Path(self.tmp.name)
+        self.p = [mock.patch.dict(server.os.environ, {"HOME": str(self.home)}), mock.patch.object(server, "HIST", self.home / "m" / "history.json")]
+        for x in self.p: x.start()
+ 
+    def tearDown(self):
+        for x in reversed(self.p): x.stop()
+        self.tmp.cleanup()
+ 
+    def test_saves_into_downloads_with_private_permissions(self):
+        r = server.save_export({"name": "meridian.json", "data": '{"a": 1}'}); f = Path(r["path"])
+        self.assertEqual(f.parent, self.home / "Downloads"); self.assertEqual(f.read_text(), '{"a": 1}')
+        self.assertEqual(f.stat().st_mode & 0o777, 0o600); self.assertRegex(f.name, r"^meridian-\d{8}-\d{6}\.json$")
+ 
+    def test_never_overwrites(self):
+        a = server.save_export({"name": "meridian.csv", "data": "1"})["path"]; b = server.save_export({"name": "meridian.csv", "data": "2"})["path"]
+        self.assertNotEqual(a, b); self.assertEqual(Path(a).read_text(), "1")
+ 
+    def test_rejects_bad_names_and_data(self):
+        for bad in ({"name": "evil.sh", "data": "x"}, {"name": "x.exe", "data": "x"}, {"name": "noext", "data": "x"},
+                    {"name": "a.json", "data": 5}, {"name": "a.json", "data": None}, {"name": "a.json", "data": "x" * (server.MAX_SAVE + 1)}):
+            with self.assertRaises(ValueError): server.save_export(bad)
+ 
+    def test_path_traversal_stays_in_downloads(self):
+        f = Path(server.save_export({"name": "../../etc/passwd.json", "data": "x"})["path"])
+        self.assertEqual(f.parent, self.home / "Downloads"); self.assertTrue(f.name.startswith("passwd-"))
+ 
+    def test_respects_xdg_download_dir_inside_home(self):
+        (self.home / ".config").mkdir(); (self.home / ".config" / "user-dirs.dirs").write_text('XDG_DOWNLOAD_DIR="$HOME/Indirilenler"\n')
+        self.assertEqual(Path(server.save_export({"name": "a.md", "data": "x"})["path"]).parent, self.home / "Indirilenler")
+ 
+    def test_xdg_dir_outside_home_is_ignored(self):
+        (self.home / ".config").mkdir(); (self.home / ".config" / "user-dirs.dirs").write_text('XDG_DOWNLOAD_DIR="/tmp/evil"\n')
+        self.assertEqual(Path(server.save_export({"name": "a.md", "data": "x"})["path"]).parent, self.home / "Downloads")
+ 
+    def test_file_goes_to_the_sudo_user(self):
+        with mock.patch.object(server.os, "geteuid", return_value=0), mock.patch.dict(server.os.environ, {"SUDO_UID": "1234", "SUDO_GID": "1235"}), \
+             mock.patch.object(server.os, "chown") as chown:
+            f = server.save_export({"name": "a.json", "data": "x"})["path"]
+        chown.assert_called_once_with(Path(f), 1234, 1235)
  
  
 if __name__ == "__main__":
