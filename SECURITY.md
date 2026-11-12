@@ -13,3 +13,6 @@ Fixed scan profiles (no raw nmap flags), strict target validation (IPv4, CIDR up
  
 ## Network access
 Meridian itself makes no outgoing connections. Scans only touch the targets you enter. The optional **vulnerability lookup** (asked once, can be switched off in the left panel) makes the nmap `vulners` script contact vulners.com with software names and versions only, and download fingerprint data from GitHub. It never sends IP addresses or hostnames, runs the script with the web-path sweep disabled (`vulners.paths=none`) so the target is not probed beyond normal version detection, and sets `vulners.max_items=0` so no API credits can be spent. Host discovery never uses it.
+ 
+## Saving exports
+Exports are written by the local server into your download folder (`~/Downloads` or the XDG setting, never outside your home directory). Only the extensions `.json .csv .md .html .xml .txt` are accepted, names are sanitised and never overwrite an existing file, files are created with `0600` permissions, and the request needs the per-run token. If Meridian was started with `sudo`, the file is handed to the real user.
