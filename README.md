@@ -114,7 +114,7 @@ docker run --rm --net=host meridian     # then open http://127.0.0.1:8765
 * Radial topology map, sortable and filterable host table, per-host notes, saved Custom presets
 * Scan history (stored locally) with a diff between two scans
 * Watch mode: re-scan a target every 5 min to 6 h and get alerts for new hosts, new ports and vanished hosts (works while Meridian is open)
-* Export: JSON, CSV, Markdown, HTML, PDF (print), raw Nmap XML, copy IP list
+* Export: JSON, CSV, Markdown, HTML, PDF (print), raw Nmap XML, copy IP list. Files are saved straight into your Downloads folder (a message shows the exact path), so no extra browser download window opens
 * 4 themes, including *Waves* (animated background, static if reduced motion is on)
 ### Accepted targets
 IPv4 address, CIDR (up to `/22`), last-octet range (`192.168.1.10-50`) or hostname. Separate several with spaces or commas (max 32 targets, 1024 addresses in total). IPv6 is not supported yet.
