@@ -1,4 +1,4 @@
-import json, sys, tempfile, threading, time, unittest, urllib.error, urllib.request
+import json, os, signal, stat, subprocess, sys, tempfile, textwrap, threading, time, unittest, urllib.error, urllib.request
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
@@ -408,7 +408,7 @@ class SaveExport(unittest.TestCase):
         with mock.patch.object(server.os, "geteuid", return_value=0), mock.patch.dict(server.os.environ, {"SUDO_UID": "1234", "SUDO_GID": "1235"}), \
              mock.patch.object(server.os, "chown") as chown:
             f = server.save_export({"name": "a.json", "data": "x"})["path"]
-        chown.assert_called_once_with(Path(f), 1234, 1235)
+        chown.assert_any_call(Path(f), 1234, 1235)   # the export; the data dir and audit log are handed over too
  
  
 class Version(unittest.TestCase):
@@ -436,3 +436,192 @@ class Version(unittest.TestCase):
  
 if __name__ == "__main__":
     unittest.main()
+
+
+FAKE_NMAP = textwrap.dedent("""\
+    #!/bin/sh
+    # stand-in for nmap: finds -oX <file>, writes one host, starts a child, then keeps running
+    while [ $# -gt 0 ]; do [ "$1" = "-oX" ] && out="$2"; shift; done
+    echo '<nmaprun><host><status state="up"/><address addr="10.0.0.1" addrtype="ipv4"/></host>' > "$out"
+    sleep 300 &
+    echo $! > "$out.child"
+    sleep 300
+    """)
+
+
+def alive(pid):
+    try: os.kill(pid, 0); return True
+    except ProcessLookupError: return False
+
+
+class Hardening(unittest.TestCase):
+    """Singleton manager, private scratch directory (CWE-377), process groups, bounded disk use."""
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(); self.dir = Path(self.tmp.name)
+        self.base = self.dir / "run"; self.base.mkdir(mode=0o700)
+        self.fake = self.dir / "nmap"; self.fake.write_text(FAKE_NMAP); self.fake.chmod(0o755)
+        real = server.shutil.which
+        self.p = [mock.patch.object(server, "HIST", self.dir / "data" / "history.json"),
+                  mock.patch.object(server, "runtime_base", return_value=self.base),
+                  mock.patch.object(server.shutil, "which", side_effect=lambda n, *a, **k: str(self.fake) if n == "nmap" else real(n, *a, **k))]
+        for x in self.p: x.start()
+        server.JOBS.clear(); server.MANAGER.shutdown()
+
+    def tearDown(self):
+        server.MANAGER.shutdown(); server.JOBS.clear()
+        for x in reversed(self.p): x.stop()
+        self.tmp.cleanup()
+
+    def wait_for(self, cond, secs=8):
+        end = time.time() + secs
+        while time.time() < end:
+            if cond(): return True
+            time.sleep(0.1)
+        return False
+
+    def test_manager_is_a_singleton(self):
+        self.assertIs(server.ScanManager(), server.MANAGER)
+        seen = []; ts = [threading.Thread(target=lambda: seen.append(server.ScanManager())) for _ in range(8)]
+        [t.start() for t in ts]; [t.join() for t in ts]
+        self.assertTrue(all(x is server.MANAGER for x in seen))
+
+    def test_workspace_is_private_and_unpredictable(self):
+        a, b = server.Workspace(self.base), server.Workspace(self.base)
+        self.assertNotEqual(a.path, b.path)
+        self.assertEqual(stat.S_IMODE(os.stat(a.path).st_mode), 0o700)
+        fd, f = a.new_file("x.xml"); os.close(fd)
+        self.assertEqual(stat.S_IMODE(os.stat(f).st_mode), 0o600)
+        with self.assertRaises(FileExistsError): a.new_file("x.xml")             # exclusive create: never reuses or overwrites
+        os.symlink(self.dir / "victim", a.path / "link.xml")
+        with self.assertRaises(OSError): a.new_file("link.xml")                  # never follows a planted symlink
+        a.destroy(); b.destroy(); self.assertFalse(a.path.exists())
+
+    def test_private_dir_refuses_symlink_and_open_dirs(self):
+        real = self.dir / "real"; real.mkdir(mode=0o700); link = self.dir / "link"; link.symlink_to(real)
+        with self.assertRaises(OSError): server.private_dir(link)
+        loose = self.dir / "loose"; loose.mkdir(); loose.chmod(0o755)
+        with self.assertRaises(OSError): server.private_dir(loose)
+        server.private_dir(loose, fix=True); self.assertEqual(stat.S_IMODE(os.stat(loose).st_mode), 0o700)
+
+    def test_scan_files_live_in_the_private_workspace(self):
+        with mock.patch.object(server, "run"):
+            jid = server.MANAGER.submit("10.0.0.1", "quick", ["-T4"])
+        x = Path(server.JOBS[jid]["xml"])
+        self.assertTrue(server.MANAGER.ws.contains(x)); self.assertEqual(stat.S_IMODE(os.stat(x).st_mode), 0o600)
+        self.assertEqual(x.parent.parent, self.base)
+
+    def test_only_one_scan_starts_under_concurrency(self):
+        results, bar = [], threading.Barrier(8)
+        def go():
+            bar.wait()
+            try: server.MANAGER.submit("x", "quick", [], demo=True); results.append("ok")
+            except server.Busy: results.append("busy")
+        with mock.patch.object(server, "run"):
+            ts = [threading.Thread(target=go) for _ in range(8)]; [t.start() for t in ts]; [t.join() for t in ts]
+        self.assertEqual(results.count("ok"), 1); self.assertEqual(results.count("busy"), 7)
+
+    def test_stop_kills_the_whole_group_and_reaps_it(self):
+        jid = server.MANAGER.submit("10.0.0.1", "quick", ["-T4"]); job = server.JOBS[jid]
+        self.assertTrue(self.wait_for(lambda: job.get("proc") and Path(job["xml"] + ".child").exists()))
+        proc, child = job["proc"], int(Path(job["xml"] + ".child").read_text())
+        self.assertTrue(alive(child))
+        self.assertTrue(server.MANAGER.stop(jid))
+        self.assertTrue(self.wait_for(lambda: job["status"] == "stopped" and "proc" not in job))
+        self.assertIsNotNone(proc.returncode)                       # reaped: no zombie
+        self.assertTrue(self.wait_for(lambda: not alive(child)))    # the child nmap started is gone as well
+
+    def test_time_limit_stops_the_scan(self):
+        with mock.patch.object(server, "SCAN_LIMIT", 1):
+            jid = server.MANAGER.submit("10.0.0.1", "quick", ["-T4"]); job = server.JOBS[jid]
+            self.assertTrue(self.wait_for(lambda: job["status"] == "stopped" and "proc" not in job))
+        self.assertIn("limit", job["error"])
+
+    def test_xml_is_not_parsed_again_while_it_does_not_change(self):
+        calls = []; real = server.parse
+        def counting(path): calls.append(1); return real(path)
+        fake2 = self.dir / "nmap2"; fake2.write_text(FAKE_NMAP.replace("sleep 300\n", "sleep 5\n").replace("sleep 300 &", "sleep 5 &")); fake2.chmod(0o755)
+        self.fake = fake2
+        with mock.patch.object(server, "parse", counting):
+            jid = server.MANAGER.submit("10.0.0.1", "quick", ["-T4"]); job = server.JOBS[jid]
+            self.assertTrue(self.wait_for(lambda: job["status"] != "running", 15))
+        self.assertLessEqual(len(calls), 3)          # one while it ran, one at the end (not one per second)
+        self.assertEqual(job["status"], "done"); self.assertEqual(len(job["hosts"]), 1)
+
+    def test_stderr_goes_to_a_file_not_a_pipe(self):
+        noisy = self.dir / "nmap3"; noisy.write_text("#!/bin/sh\nhead -c 300000 /dev/zero | tr '\\0' x >&2\nexit 2\n"); noisy.chmod(0o755); self.fake = noisy
+        jid = server.MANAGER.submit("10.0.0.1", "quick", []); job = server.JOBS[jid]
+        self.assertTrue(self.wait_for(lambda: job["status"] != "running"))       # a full 64 KB pipe would hang here
+        self.assertEqual(job["status"], "error"); self.assertLessEqual(len(job["error"]), 300)
+
+    def test_old_xml_files_are_deleted(self):
+        ws = server.MANAGER.workspace(); made = []
+        for i in range(5):
+            fd, f = ws.new_file(f"0000000{i}.xml"); os.close(fd)
+            server.JOBS[f"0000000{i}"] = {"id": f"0000000{i}", "status": "done", "ts": i, "xml": str(f), "hosts": []}; made.append(f)
+        with mock.patch.object(server, "KEEP_XML", 2): server.MANAGER._prune()
+        self.assertEqual([f.exists() for f in made], [False, False, False, True, True])
+
+    def test_memory_is_bounded(self):
+        for i in range(8): server.JOBS[f"{i:08x}"] = {"id": f"{i:08x}", "status": "done", "ts": i, "xml": "", "hosts": []}
+        with mock.patch.object(server, "MAX_JOBS", 3): server.MANAGER._prune()
+        self.assertEqual(sorted(server.JOBS), [f"{i:08x}" for i in (5, 6, 7)])
+
+    def test_xml_download_only_serves_the_workspace(self):
+        outside = self.dir / "secret.xml"; outside.write_text("<secret/>")
+        ws = server.MANAGER.workspace()
+        server.JOBS["aaaaaaaa"] = {"id": "aaaaaaaa", "status": "done", "ts": 1, "xml": str(outside), "hosts": []}
+        self.assertFalse(ws.contains(outside))
+
+    def test_shutdown_removes_the_workspace(self):
+        ws = server.MANAGER.workspace(); self.assertTrue(ws.path.is_dir())
+        server.MANAGER.shutdown(); self.assertFalse(ws.path.exists()); self.assertIsNone(server.MANAGER.ws)
+
+    @unittest.skipUnless(Path("/proc/self/cmdline").exists(), "needs /proc")
+    def test_sweep_stops_an_orphan_and_removes_its_directory(self):
+        gone = subprocess.Popen(["true"]); gone.wait()                     # a pid that is certainly dead
+        d = self.base / f"meridian-run-{gone.pid}-abcd1234"; d.mkdir(mode=0o700)
+        orphan = subprocess.Popen(["sh", "-c", f"sleep 60 # {d}"], start_new_session=True)
+        (d / "nmap.pid").write_text(str(orphan.pid))
+        live = self.base / f"meridian-run-{os.getpid()}-zzzz0000"; live.mkdir(mode=0o700)
+        self.assertTrue(self.wait_for(lambda: str(d) in server._cmdline(orphan.pid), 3))
+        server.sweep_stale(self.base)
+        self.assertEqual(orphan.wait(timeout=5) is not None, True); self.assertFalse(d.exists()); self.assertTrue(live.exists())
+
+    def test_history_is_written_atomically_and_privately(self):
+        server.JOBS["bbbbbbbb"] = {"id": "bbbbbbbb", "status": "done", "ts": 1, "dur": 3, "target": "t", "profile": "quick", "hosts": [], "xml": ""}
+        server.save_history()
+        self.assertEqual(stat.S_IMODE(os.stat(server.HIST).st_mode), 0o600)
+        self.assertEqual(stat.S_IMODE(os.stat(server.HIST.parent).st_mode), 0o700)
+        self.assertEqual([f.name for f in server.HIST.parent.iterdir()], ["history.json"])    # no temp file left behind
+        server.JOBS.clear(); server.load_history(); self.assertIn("bbbbbbbb", server.JOBS)
+
+    def test_history_with_bad_entries_is_ignored(self):
+        server.HIST.parent.mkdir(mode=0o700); server.HIST.write_text(json.dumps([{"id": "../../etc", "hosts": []}, {"id": "cccccccc", "hosts": "x"}, 5]))
+        server.load_history(); self.assertEqual(server.JOBS, {})
+
+    def test_audit_never_follows_a_symlink(self):
+        d = server.data_dir(); victim = self.dir / "victim.txt"; victim.write_text("keep")
+        os.symlink(victim, d / "audit.log"); server.audit("x")
+        self.assertEqual(victim.read_text(), "keep")
+
+    def test_audit_log_rotates(self):
+        with mock.patch.object(server, "AUDIT_MAX", 60):
+            for i in range(6): server.audit(f"line {i} " + "x" * 20)
+        self.assertTrue((server.HIST.parent / "audit.log.1").exists())
+        self.assertEqual(stat.S_IMODE(os.stat(server.HIST.parent / "audit.log").st_mode), 0o600)
+
+
+class UiContract(unittest.TestCase):
+    """Static checks on the single-file UI (no browser needed)."""
+    html = (Path(server.__file__).parent / "index.html").read_text()
+
+    def test_vulnerability_check_asks_every_time(self):
+        self.assertNotIn("mr-lookup", self.html)                       # nothing is remembered between runs
+        self.assertIn("lk.onchange", self.html); self.assertIn("askLookup()", self.html)
+
+    def test_demo_page_is_in_sync_with_the_ui(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("build_demo", Path(server.__file__).parent / "tools" / "build_demo.py")
+        m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+        self.assertEqual(m.build(), (Path(server.__file__).parent / "docs" / "index.html").read_text(),
+                         "docs/index.html is out of date: run  python3 tools/build_demo.py")
