@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Meridian - nmap engine + live web UI. Binds to localhost only. Scan only what you are authorized to scan."""
-import ipaddress, json, os, signal, socket, re, secrets, shutil, subprocess, sys, threading, time, tempfile, uuid
+import atexit, ipaddress, json, os, signal, socket, re, secrets, shutil, stat, subprocess, sys, threading, time, tempfile, uuid
 import xml.etree.ElementTree as ET
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
  
 PORT = 0  # chosen at start-up (free port)
-VERSION = "0.2.0"   # bump for every release and tag the same number on GitHub (v0.2.0)
+VERSION = "0.3.0"   # bump for every release and tag the same number on GitHub (v0.3.0)
 TOKEN = secrets.token_urlsafe(16)
 JOBS = {}
 # Whitelisted profiles: the user never supplies raw nmap flags (no argument injection).
@@ -21,6 +21,11 @@ PROFILES = {
 }
 SCRIPTS = {"default", "safe", "vuln", "discovery", "auth", "version", "vulners"}
 HIST = Path.home() / ".local/share/meridian/history.json"
+MAX_JOBS = 100          # finished scans kept in memory
+KEEP_XML = 20           # raw nmap XML files kept on disk (the newest scans); older ones are deleted
+SCAN_LIMIT = 3600       # seconds; a scan running longer is stopped
+MIN_PARSE_GAP = 2.0     # seconds between two parses of the growing XML file (and never when it did not change)
+AUDIT_MAX = 1_000_000   # bytes; audit.log is rotated to audit.log.1 above this size, so it cannot grow forever
  
 def custom_args(o):
     t = int(o.get("timing", 4))
@@ -90,18 +95,234 @@ def parse_vulners(sc, limit=15):
     return {"mode": mode, "total": len(items), "cves": sum(i["id"].upper().startswith("CVE-") for i in items),
             "exploits": sum(i["exploit"] for i in items), "kev": sum(i["kev"] for i in items), "items": items[:limit]}
  
+def _owners():
+    """Users allowed to own our directories: ourselves, plus the real user when started with sudo."""
+    me = os.geteuid() if hasattr(os, "geteuid") else None
+    sudo = os.environ.get("SUDO_UID", "")
+    return {me} | ({int(sudo)} if me == 0 and sudo.isdigit() else set())
+
+def _chown_sudo(path):
+    """Started with sudo: hand a file we created to the real user, so a later normal run can still use it."""
+    if hasattr(os, "geteuid") and os.geteuid() == 0 and os.environ.get("SUDO_UID", "").isdigit():
+        try: os.chown(path, int(os.environ["SUDO_UID"]), int(os.environ.get("SUDO_GID") or os.environ["SUDO_UID"]))
+        except OSError: pass
+
+def private_dir(p, fix=False):
+    """Create (if needed) and verify a directory that only we can use. A symlink or a directory owned by somebody else is refused (CWE-59/377).
+    fix=True tightens the mode of our own directory to 0700 instead of refusing it."""
+    p = Path(p)
+    try: os.mkdir(p, 0o700)
+    except FileExistsError: pass
+    st = os.lstat(p)    # lstat: a symlink is not a directory here
+    if not stat.S_ISDIR(st.st_mode) or (hasattr(os, "geteuid") and st.st_uid not in _owners()): raise OSError(f"Unsafe directory: {p}")
+    if st.st_mode & 0o077:
+        if not fix: raise OSError(f"Directory is open to other users: {p}")
+        os.chmod(p, 0o700)
+    return p
+
+def data_dir():
+    HIST.parent.parent.mkdir(parents=True, exist_ok=True)
+    d = private_dir(HIST.parent, fix=True); _chown_sudo(d)
+    return d
+
+def runtime_base():
+    """Where the per-run scratch directory lives: /run for root, $XDG_RUNTIME_DIR (a private tmpfs, nothing reaches the disk) for users, else the system temp dir."""
+    if hasattr(os, "geteuid") and os.geteuid() == 0 and Path("/run").is_dir(): return Path("/run")
+    x = os.environ.get("XDG_RUNTIME_DIR")
+    if x:
+        try: private_dir(x); return Path(x)
+        except OSError: pass
+    return Path(tempfile.gettempdir())
+
+class Workspace:
+    """Private scratch directory of ONE Meridian process. mkdtemp gives a random name and mode 0700 atomically, which removes the predictable-name
+    and symlink race of a fixed /tmp/meridian-<id>.xml (CWE-377). Files inside are created exclusively (O_EXCL, no symlinks) with mode 0600."""
+    def __init__(self, base=None):
+        self.path = Path(tempfile.mkdtemp(prefix=f"meridian-run-{os.getpid()}-", dir=base or runtime_base()))
+        private_dir(self.path)
+    def new_file(self, name):
+        p = self.path / name
+        return os.open(p, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600), p
+    def contains(self, p):
+        try: return Path(p).resolve().parent == self.path.resolve()
+        except OSError: return False
+    def tail(self, p, n=300):
+        try: return Path(p).read_text(errors="ignore")[-n:]
+        except OSError: return ""
+    def destroy(self): shutil.rmtree(self.path, ignore_errors=True)
+
+def _cmdline(pid):
+    try: return Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode(errors="ignore")
+    except OSError: return ""
+
+def sweep_stale(base=None):
+    """After a crash (kill -9, power loss) an old run may have left an nmap process and its scratch directory behind. Stop that nmap (only if
+    its command line still names the directory) and delete the directory. Directories of Meridian processes that are still alive are left alone."""
+    base = Path(base) if base else runtime_base()
+    for d in base.glob("meridian-run-*"):
+        m = re.fullmatch(r"meridian-run-(\d+)-\w+", d.name)
+        try:
+            st = os.lstat(d)
+            if not m or not stat.S_ISDIR(st.st_mode) or st.st_uid not in _owners() or int(m.group(1)) == os.getpid(): continue
+            if "server.py" in _cmdline(m.group(1)) or "meridian" in _cmdline(m.group(1)).lower(): continue    # that Meridian is still running
+            try:
+                pid = int((d / "nmap.pid").read_text().strip())
+                if str(d) in _cmdline(pid):
+                    os.killpg(pid, signal.SIGTERM); time.sleep(0.3)
+                    if str(d) in _cmdline(pid): os.killpg(pid, signal.SIGKILL)
+            except (OSError, ValueError, ProcessLookupError): pass
+            shutil.rmtree(d, ignore_errors=True)
+        except OSError: continue
+
+class Busy(Exception): pass
+
+class ScanManager:
+    """Singleton (one per process) that owns everything a scan needs: the job table, the single scan slot, the private workspace and every nmap child.
+    All starts go through submit(), so the one-scan-at-a-time rule holds for the web UI and the watcher alike, with no check-then-start race."""
+    _instance, _guard = None, threading.Lock()
+    def __new__(cls):
+        with cls._guard:
+            if cls._instance is None:
+                o = super().__new__(cls); o.lock = threading.RLock(); o.ws = None; cls._instance = o
+            return cls._instance
+    def jobs(self):
+        with self.lock: return list(JOBS.values())
+    def workspace(self):
+        with self.lock:
+            if self.ws is None: self.ws = Workspace()
+            return self.ws
+    def submit(self, target, profile, args, demo=False, lookup=False, audit_line=None):
+        with self.lock:
+            if any(j["status"] == "running" for j in JOBS.values()): raise Busy("A scan is already running. Stop it first.")
+            jid = uuid.uuid4().hex[:8]; xml = ""
+            if not demo:
+                fd, p = self.workspace().new_file(f"{jid}.xml"); os.close(fd); xml = str(p)
+            JOBS[jid] = {"status": "running", "hosts": [], "error": "", "target": target, "profile": profile, "id": jid, "ts": time.time(),
+                         "t0": time.time(), "demo": demo, "lookup": lookup, "xml": xml}
+            job = JOBS[jid]
+        if audit_line: audit(audit_line(jid))
+        threading.Thread(target=run, args=(job, args), daemon=True).start()
+        return jid
+    def stop(self, jid):
+        j = JOBS.get(jid)
+        if not j: return False
+        with self.lock:
+            if j["status"] == "running": j["status"] = "stopped"
+            p = j.get("proc")
+        if p: self._signal(p, signal.SIGTERM)     # the scan thread escalates to SIGKILL and reaps the process
+        return True
+    @staticmethod
+    def _signal(p, sig):
+        if p.poll() is not None: return
+        try: os.killpg(p.pid, sig) if hasattr(os, "killpg") else p.send_signal(sig)    # the whole process group: nmap and anything it started
+        except (ProcessLookupError, PermissionError, OSError): pass
+    def _terminate(self, p, grace=5):
+        """TERM, then KILL, then wait(): the child is always reaped, so no zombie stays behind."""
+        for sig in (signal.SIGTERM, getattr(signal, "SIGKILL", signal.SIGTERM)):
+            if p.poll() is not None: break
+            self._signal(p, sig)
+            try: p.wait(timeout=grace)
+            except subprocess.TimeoutExpired: pass
+        try: p.wait(timeout=2)
+        except subprocess.TimeoutExpired: pass
+    def execute(self, job, args):
+        try:
+            if job["demo"]: self._demo(job)
+            else: self._nmap(job, args)
+        except Exception as e:
+            with self.lock: job["status"], job["error"] = "error", str(e)[:300]
+        finally:
+            with self.lock:
+                if job["status"] == "running": job["status"] = "done"
+                job["dur"] = int(time.time() - job["t0"]); job.pop("proc", None)
+            save_history(); self._prune()
+    def _demo(self, job):
+        for k in range(1, 7):
+            time.sleep(1.2)
+            if job["status"] != "running": break
+            job["hosts"] = demo(job.get("lookup"))[:k]
+    def _nmap(self, job, args):
+        nmap = shutil.which("nmap")
+        if not nmap: raise RuntimeError("nmap not found")
+        ws = self.workspace(); efd, errp = ws.new_file(f"{job['id']}.err")      # stderr goes to a file: a full pipe can never block nmap
+        try:
+            p = subprocess.Popen([nmap, *args, "-oX", job["xml"], *job["target"].split()], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                 stderr=efd, start_new_session=True, close_fds=True)   # own process group: one signal reaches nmap and its children
+        finally: os.close(efd)
+        job["proc"] = p
+        try: (ws.path / "nmap.pid").write_text(str(p.pid))      # lets the next start find an orphan after a crash (sweep_stale)
+        except OSError: pass
+        deadline, seen, last, gap = time.monotonic() + SCAN_LIMIT, None, 0.0, MIN_PARSE_GAP
+        try:
+            while True:
+                try: p.wait(timeout=1.0); break      # wakes up the moment nmap exits, no busy polling
+                except subprocess.TimeoutExpired: pass
+                if job["status"] != "running": break     # stopped by the user
+                if time.monotonic() > deadline:
+                    job["status"], job["error"] = "stopped", "Stopped: 1 hour limit reached"; break
+                try: st = os.stat(job["xml"]); sig = (st.st_size, st.st_mtime_ns)
+                except OSError: sig = None
+                if sig != seen and time.monotonic() - last >= gap:       # parse only when nmap wrote something new, and not too often
+                    t = time.monotonic(); hosts = parse(job["xml"])
+                    if hosts: job["hosts"] = hosts
+                    seen, last = sig, time.monotonic(); gap = max(MIN_PARSE_GAP, 4 * (last - t))    # a slow parse backs the polling off
+        finally:
+            self._terminate(p)       # nothing to do when nmap already exited; otherwise TERM -> KILL -> wait()
+            try: (ws.path / "nmap.pid").unlink()
+            except OSError: pass
+        hosts = parse(job["xml"])
+        if hosts: job["hosts"] = hosts
+        with self.lock:
+            if job["status"] == "running":
+                job["status"] = "done" if p.returncode == 0 else "error"
+                if p.returncode: job["error"] = ws.tail(errp)
+        try: os.unlink(errp)
+        except OSError: pass
+    def _prune(self):
+        """Bounded memory and disk: keep the newest MAX_JOBS finished scans and the XML of the newest KEEP_XML ones."""
+        with self.lock:
+            done = sorted((j for j in JOBS.values() if j["status"] != "running"), key=lambda j: j["ts"])
+            for j in done[:-MAX_JOBS] if len(done) > MAX_JOBS else []:
+                JOBS.pop(j["id"], None)
+            with_xml = [j for j in done if j.get("xml")]
+            for j in with_xml[:-KEEP_XML] if len(with_xml) > KEEP_XML else []:
+                try: os.unlink(j["xml"])
+                except OSError: pass
+                j["xml"] = ""
+    def shutdown(self):
+        """Stop every nmap we started and delete the scratch directory (runs at exit and on SIGTERM/SIGHUP)."""
+        with self.lock:
+            for j in list(JOBS.values()):
+                p = j.get("proc")
+                if p and p.poll() is None:
+                    j["status"] = "stopped"; self._terminate(p, grace=2)
+            if self.ws: self.ws.destroy(); self.ws = None
+
+MANAGER = ScanManager()
+
 def save_history():
+    """Atomic: write a private temp file next to the history, fsync, then rename over it. A crash can never leave half a file."""
     try:
-        HIST.parent.mkdir(parents=True, exist_ok=True)
-        keep = [{k: j[k] for k in ("id", "target", "profile", "hosts", "ts", "dur")} for j in JOBS.values() if j["status"] in ("done", "stopped")]
-        HIST.write_text(json.dumps(keep[-50:])); os.chmod(HIST, 0o600)
-    except OSError: pass
- 
+        d = data_dir()
+        keep = [{k: j[k] for k in ("id", "target", "profile", "hosts", "ts", "dur")} for j in MANAGER.jobs() if j["status"] in ("done", "stopped") and "dur" in j]
+        fd, tmp = tempfile.mkstemp(dir=d, prefix=".history-", suffix=".tmp")     # mode 0600, random name
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f: json.dump(keep[-50:], f); f.flush(); os.fsync(f.fileno())
+            os.replace(tmp, HIST)
+        except BaseException:
+            try: os.unlink(tmp)
+            except OSError: pass
+            raise
+        _chown_sudo(HIST)
+    except (OSError, TypeError, ValueError): pass
+
 def load_history():
     try:
+        if HIST.stat().st_size > 20_000_000: return
         for j in json.loads(HIST.read_text()):
-            JOBS[j["id"]] = j | {"status": "done", "error": "", "t0": 0, "demo": False, "xml": ""}
-    except (OSError, ValueError, KeyError): pass
+            if isinstance(j, dict) and re.fullmatch(r"[0-9a-f]{8}", str(j.get("id", ""))) and isinstance(j.get("hosts"), list):
+                JOBS[j["id"]] = j | {"status": "done", "error": "", "t0": 0, "demo": False, "xml": ""}
+    except (OSError, ValueError, KeyError, TypeError): pass
  
 HOST_RE = re.compile(r"^(?=.*[A-Za-z])[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?)*$")
 RANGE_RE = re.compile(r"^(\d{1,3}\.\d{1,3}\.\d{1,3})\.(\d{1,3})-(\d{1,3})$")  # 192.168.1.10-50
@@ -177,8 +398,7 @@ def save_export(d):
         try: fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600); break
         except FileExistsError: k += 1
     with os.fdopen(fd, "w", encoding="utf-8") as f: f.write(data)
-    if hasattr(os, "geteuid") and os.geteuid() == 0 and os.environ.get("SUDO_UID", "").isdigit():
-        os.chown(dest, int(os.environ["SUDO_UID"]), int(os.environ.get("SUDO_GID") or os.environ["SUDO_UID"]))   # started with sudo: give the file to the real user
+    _chown_sudo(dest)       # started with sudo: give the file to the real user
     audit(f"export saved {dest.name} ({len(data)} chars)")
     return {"path": str(dest)}
  
@@ -192,11 +412,15 @@ def local_cidr():
         return "192.168.1.0/24"
  
 def audit(msg):
-    """Append-only local audit trail of every scan that was started."""
+    """Append-only local audit trail of every scan that was started. Never follows a symlink, rotates at AUDIT_MAX."""
     try:
-        p = HIST.parent / "audit.log"; p.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with open(p, "a") as f: f.write(time.strftime("%Y-%m-%d %H:%M:%S ") + re.sub(r"[\r\n]+", " ", msg) + "\n")
-        os.chmod(p, 0o600)
+        d = data_dir(); p = d / "audit.log"
+        try:
+            if p.stat().st_size > AUDIT_MAX: os.replace(p, d / "audit.log.1")
+        except FileNotFoundError: pass
+        fd = os.open(p, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(fd, "a", encoding="utf-8") as f: f.write(time.strftime("%Y-%m-%d %H:%M:%S ") + re.sub(r"[\r\n]+", " ", msg) + "\n")
+        _chown_sudo(p)
     except OSError: pass
  
 def parse(path):
@@ -264,37 +488,13 @@ def demo(lookup=False):
              "ports": [port(i, p, sv, ver) for p, sv, ver in ps]}
             for i, n, o, ps, v in d]
  
-def run(job, args):
-    xml = job["xml"]
-    try:
-        if job["demo"]:
-            for k in range(1, 7):
-                time.sleep(1.2); job["hosts"] = demo(job.get("lookup"))[:k]
-                if job["status"] == "stopped": break
-        else:
-            p = job["proc"] = subprocess.Popen(["nmap", *args, "-oX", xml, *job["target"].split()], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
-            while p.poll() is None:
-                time.sleep(1); job["hosts"] = parse(xml) or job["hosts"]
-                if time.time() - job["t0"] > 3600:
-                    p.terminate(); job["status"], job["error"] = "stopped", "Stopped: 1 hour limit reached"
-            job["hosts"] = parse(xml) or job["hosts"]
-            if job["status"] != "stopped":
-                job["status"] = "done" if p.returncode == 0 else "error"
-                if p.returncode: job["error"] = p.stderr.read()[-300:]
-        if job["status"] == "running": job["status"] = "done"
-    except Exception as e:
-        job["status"], job["error"] = "error", str(e)
-    job["dur"] = int(time.time() - job["t0"]); save_history()
- 
+def run(job, args): MANAGER.execute(job, args)
+
 WATCH, ALERTS = [], []
- 
+STOP = threading.Event()
+
 def start_job(target, profile, args):
-    jid = uuid.uuid4().hex[:8]
-    JOBS[jid] = {"status": "running", "hosts": [], "error": "", "target": target, "profile": profile, "id": jid, "ts": time.time(),
-                 "t0": time.time(), "demo": False, "xml": str(Path(tempfile.gettempdir()) / f"meridian-{jid}.xml")}
-    audit(f"watch-scan {jid} target={target} profile={profile}")
-    threading.Thread(target=run, args=(JOBS[jid], args), daemon=True).start()
-    return jid
+    return MANAGER.submit(target, profile, args, audit_line=lambda jid: f"watch-scan {jid} target={target} profile={profile}")
  
 def diff_alert(prev, cur, label):
     now = time.strftime("%H:%M:%S"); old = {h["ip"]: {p["port"] for p in h["ports"]} for h in prev["hosts"]}
@@ -304,28 +504,36 @@ def diff_alert(prev, cur, label):
             for p in {p["port"] for p in h["ports"]} - old[h["ip"]]: ALERTS.append(f"{now} NEW PORT {h['ip']}:{p}")
     for ip in old:
         if ip not in {h["ip"] for h in cur["hosts"]}: ALERTS.append(f"{now} HOST GONE {ip}")
+    del ALERTS[:-200]
  
+def watch_tick():
+    with MANAGER.lock: items = list(WATCH)
+    for w in items:
+        j = JOBS.get(w.get("jid"))
+        if j and j["status"] == "running": continue
+        if j and j["status"] == "done" and w.get("seen") != w["jid"]:
+            if w.get("prev"): diff_alert(w["prev"], j, w["target"])
+            w["prev"], w["seen"] = j, w["jid"]
+        if time.time() >= w["next"]:
+            try: w["jid"] = start_job(w["target"], w["profile"], PROFILES[w["profile"]]); w["next"] = time.time() + w["every"] * 60
+            except Busy: pass                       # the UI or an earlier scan holds the slot: try again on the next tick
+            except OSError: w["next"] = time.time() + 60
+
 def watcher():
-    while True:
-        time.sleep(20)
-        for w in list(WATCH):
-            j = JOBS.get(w.get("jid"))
-            if j and j["status"] == "running": continue
-            if j and j["status"] == "done" and w.get("seen") != w["jid"]:
-                if w.get("prev"): diff_alert(w["prev"], j, w["target"])
-                w["prev"], w["seen"] = j, w["jid"]
-            if time.time() >= w["next"] and not any(x["status"] == "running" for x in JOBS.values()):
-                w["jid"] = start_job(w["target"], w["profile"], PROFILES[w["profile"]]); w["next"] = time.time() + w["every"] * 60
- 
+    while not STOP.wait(20):
+        try: watch_tick()
+        except Exception: pass                      # one bad tick must never end the watcher
+
 def handle_watch(d):
     if d.get("ack") is not True or d.get("profile") not in PROFILES: raise ValueError("Profile/authorization missing")
     t = valid_targets(d.get("target")); m = int(d.get("minutes", 0))
-    WATCH[:] = [w for w in WATCH if w["target"] != t]
-    if m == 0: return 200, {"ok": True}
-    if m not in (5, 15, 60, 360): raise ValueError("Invalid interval")
-    if len(WATCH) >= 5: raise ValueError("At most 5 watches")
-    if any_public(t) and d.get("public_ok") is not True: return 409, {"error": "public"}
-    WATCH.append({"target": t, "profile": d["profile"], "every": m, "next": 0})
+    with MANAGER.lock:
+        WATCH[:] = [w for w in WATCH if w["target"] != t]
+        if m == 0: return 200, {"ok": True}
+        if m not in (5, 15, 60, 360): raise ValueError("Invalid interval")
+        if len(WATCH) >= 5: raise ValueError("At most 5 watches")
+        if any_public(t) and d.get("public_ok") is not True: return 409, {"error": "public"}
+        WATCH.append({"target": t, "profile": d["profile"], "every": m, "next": 0})
     audit(f"watch target={t} profile={d['profile']} every={m}min")
     return 200, {"ok": True}
  
@@ -349,12 +557,14 @@ class H(BaseHTTPRequestHandler):
             html = (Path(__file__).parent / "index.html").read_text().replace("__TOKEN__", TOKEN).replace("__VERSION__", VERSION)
             return self.send(200, html.encode(), "text/html; charset=utf-8")
         xm = re.fullmatch(r"/api/xml/([0-9a-f]{8})", self.path)
-        if xm and xm.group(1) in JOBS and JOBS[xm.group(1)]["xml"] and Path(JOBS[xm.group(1)]["xml"]).exists():
-            return self.send(200, Path(JOBS[xm.group(1)]["xml"]).read_bytes(), "application/xml")
+        if xm:
+            x = (JOBS.get(xm.group(1)) or {}).get("xml")
+            if x and MANAGER.ws and MANAGER.ws.contains(x) and Path(x).is_file():      # only files inside our private scratch directory
+                return self.send(200, Path(x).read_bytes(), "application/xml")
         if self.path == "/api/alerts": return self.send(200, {"alerts": ALERTS[-30:], "watch": [{"target": w["target"], "profile": w["profile"], "every": w["every"]} for w in WATCH]})
         if self.path == "/api/net": return self.send(200, {"cidr": local_cidr(), "root": (os.geteuid() == 0) if hasattr(os, "geteuid") else None})
         if self.path == "/api/history":
-            return self.send(200, [{"id": j["id"], "target": j["target"], "profile": j["profile"], "status": j["status"], "ts": j["ts"], "hosts": len(j["hosts"])} for j in sorted(JOBS.values(), key=lambda x: -x["ts"])])
+            return self.send(200, [{"id": j["id"], "target": j["target"], "profile": j["profile"], "status": j["status"], "ts": j["ts"], "hosts": len(j["hosts"])} for j in sorted(MANAGER.jobs(), key=lambda x: -x["ts"])])
         m = re.fullmatch(r"/api/scan/([0-9a-f]{8})", self.path)
         j = JOBS.get(m.group(1)) if m else None
         if not j: return self.send(404, {"error": "not found"})
@@ -369,10 +579,7 @@ class H(BaseHTTPRequestHandler):
             except (ValueError, TypeError, OSError, json.JSONDecodeError) as e:
                 return self.send(400, {"error": str(e)})
         sm = re.fullmatch(r"/api/stop/([0-9a-f]{8})", self.path)
-        if sm and sm.group(1) in JOBS:
-            j = JOBS[sm.group(1)]; j["status"] = "stopped"
-            if j.get("proc"): j["proc"].terminate()
-            return self.send(200, {"ok": True})
+        if sm and MANAGER.stop(sm.group(1)): return self.send(200, {"ok": True})
         try:
             d = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length", 0)), 4096)))
             if self.path == "/api/watch": return self.send(*handle_watch(d))
@@ -386,13 +593,12 @@ class H(BaseHTTPRequestHandler):
             return self.send(400, {"error": str(e)})
         if not demo_mode and any_public(target) and d.get("public_ok") is not True:
             return self.send(409, {"error": "public"})
-        if any(j["status"] == "running" for j in JOBS.values()):
-            return self.send(409, {"error": "A scan is already running. Stop it first."})
-        jid = uuid.uuid4().hex[:8]
-        JOBS[jid] = {"status": "running", "hosts": [], "error": "", "target": target, "profile": d["profile"],
-                     "id": jid, "ts": time.time(), "t0": time.time(), "demo": demo_mode, "lookup": lookup and "-sn" not in args, "xml": str(Path(tempfile.gettempdir()) / f"meridian-{jid}.xml")}
-        audit(f"scan {jid} target={target} profile={d['profile']} public={any_public(target)} demo={demo_mode} lookup={lookup and '-sn' not in args}")
-        threading.Thread(target=run, args=(JOBS[jid], args), daemon=True).start()
+        lk = lookup and "-sn" not in args
+        try:
+            jid = MANAGER.submit(target, d["profile"], args, demo=demo_mode, lookup=lk,
+                                 audit_line=lambda j: f"scan {j} target={target} profile={d['profile']} public={any_public(target)} demo={demo_mode} lookup={lk}")
+        except Busy as e: return self.send(409, {"error": str(e)})
+        except OSError: return self.send(500, {"error": "Could not create the private scratch directory"})
         self.send(200, {"id": jid})
  
 def find_browser():
@@ -407,7 +613,10 @@ def open_window(url, srv):
         # Chromium refuses to run as root, so start the window as the user who ran sudo.
         user, b = os.environ.get("SUDO_USER"), find_browser()
         if user and user != "root" and b:
-            prof = str(Path(tempfile.gettempdir()) / f"meridian-ui-{uuid.uuid4().hex[:8]}")
+            prof = tempfile.mkdtemp(prefix="meridian-ui-")      # random name, mode 0700; then handed to the user the browser runs as
+            try:
+                import pwd; pw = pwd.getpwnam(user); os.chown(prof, pw.pw_uid, pw.pw_gid)
+            except (ImportError, KeyError, OSError): pass
             keep = "DISPLAY,XAUTHORITY,WAYLAND_DISPLAY,XDG_RUNTIME_DIR,DBUS_SESSION_BUS_ADDRESS"
             r = subprocess.run(["sudo", "-u", user, f"--preserve-env={keep}", b, f"--app={url}", f"--user-data-dir={prof}",
                                 "--window-size=1360,860", "--no-first-run", "--disable-extensions", "--log-level=3"], **QUIET)
@@ -466,6 +675,13 @@ if __name__ == "__main__":
     if "--version" in sys.argv or "-V" in sys.argv: print(f"Meridian {VERSION}"); sys.exit(0)
     if "--help" in sys.argv or "-h" in sys.argv: print(HELP); sys.exit(0)
     if "--uninstall" in sys.argv: sys.exit(uninstall())
+    try: sweep_stale()          # an nmap or scratch directory left behind by a crashed run
+    except OSError: pass
+    atexit.register(MANAGER.shutdown)
+    for _s in (signal.SIGTERM, getattr(signal, "SIGHUP", None)):      # Ctrl+C already raises KeyboardInterrupt
+        if _s:
+            try: signal.signal(_s, lambda *a: sys.exit(0))
+            except (ValueError, OSError): pass
     load_history(); threading.Thread(target=watcher, daemon=True).start()
     try: srv = ThreadingHTTPServer(("127.0.0.1", int(os.environ.get("MERIDIAN_PORT", 8765))), H)   # fixed port keeps browser storage (theme, notes) stable
     except OSError: srv = ThreadingHTTPServer(("127.0.0.1", 0), H)                                      # busy: any free port
@@ -480,4 +696,6 @@ if __name__ == "__main__":
         else: open_window(url, srv)
     except KeyboardInterrupt:
         pass
+    finally:
+        STOP.set(); MANAGER.shutdown()
     print("Bye.")
