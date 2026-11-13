@@ -134,7 +134,7 @@ When it is turned on, every scan that checks ports (Quick, Services, Full TCP, O
 2. The `vulners` NSE script that ships with nmap looks that software up at vulners.com and returns **CVEs, CVSS scores and whether public exploit code exists**.
 Meridian shows the result under each port in the host panel (worst first), adds a finding with a **recommended action**, raises the host's risk score, and includes the CVEs in the JSON, CSV, Markdown and HTML exports. **Host discovery never runs it**, because it does not check ports.
  
-**Turning it on and off.** The first time you start a port scan, Meridian asks once. After that, use the **Check known vulnerabilities (online)** switch in the left panel.
+**Turning it on.** Every time you tick **Check known vulnerabilities (online)** in the left panel, a warning window explains what is sent and asks you to confirm. The confirmation counts for the next scan only: the box clears itself when that scan starts, and nothing is remembered between runs.
  
 **What leaves your machine.** Only software names and versions (for example `vsftpd 2.3.4`) go to vulners.com, never IP addresses or hostnames. The nmap script also downloads its fingerprint data from GitHub. No API key is needed or used.
  
@@ -145,7 +145,7 @@ Meridian shows the result under each port in the host panel (worst first), adds 
 * Without an API key the data has no CISA "actively exploited" flag; public-exploit flags and CVSS are included. A free vulners.com key adds that flag, and Meridian never spends API credits.
 * Meridian only **reports** that exploits exist. It does not run or download exploit code.
 ## Security model
-Localhost-only binding, per-run token (constant-time compare), Host and Origin checks, strict CSP, whitelisted scan options, strict target validation, one scan at a time, 1-hour scan limit, public-target confirmation, authorization checkbox before every scan, and a local audit log at `~/.local/share/meridian/audit.log` (history is stored with `0600` permissions). See [SECURITY.md](SECURITY.md).
+Localhost-only binding, per-run token (constant-time compare), Host and Origin checks, strict CSP, whitelisted scan options, strict target validation, one scan at a time (enforced by a single `ScanManager`), 1-hour scan limit, public-target confirmation, authorization checkbox before every scan, and a local audit log at `~/.local/share/meridian/audit.log` (rotated at 1 MB; history is stored with `0600` permissions). Scratch files live in a private `0700` directory with a random name (never a fixed name in `/tmp`), and every nmap runs in its own process group that is stopped and reaped on stop, time limit, exit and crash recovery. See [SECURITY.md](SECURITY.md).
  
 Risk scores are heuristics from exposed services and NSE output, not a substitute for a professional assessment.
  
@@ -164,9 +164,11 @@ python3 -m unittest discover -s tests -v
 ```
 CI runs the same command on Python 3.10 - 3.13 (`.github/workflows/tests.yml`).
  
-Releases: the version number lives in `VERSION` at the top of `server.py`. Bump it for every release and tag the same number on GitHub (for example `v0.2.0`).
+Releases: the version number lives in `VERSION` at the top of `server.py`. Bump it for every release and tag the same number on GitHub (for example `v0.3.0`).
  
-Layout: `server.py` (HTTP server, nmap runner, XML parser, validation), `index.html` (single-file UI), `docs/` (browser-only demo), `tests/`, `install.sh`, `Dockerfile`.
+Layout: `server.py` (HTTP server, `ScanManager`, nmap runner, XML parser, validation), `index.html` (single-file UI), `docs/` (browser-only demo), `tools/build_demo.py`, `tests/`, `install.sh`, `Dockerfile`.
+
+The demo `docs/index.html` is **generated** from `index.html` and `docs/demo-shim.js`. After changing the UI run `python3 tools/build_demo.py`; a test fails if the two are out of sync.
  
 ## Roadmap
 Optional vulners API key setting (adds the "actively exploited" flag), offline lookup, NSE script picker, IPv6 targets.
