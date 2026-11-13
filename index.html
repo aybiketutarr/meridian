@@ -3,15 +3,15 @@
 <title>Meridian</title>
 <style>
 :root{--ui:"Inter","Cantarell","Segoe UI Variable","Segoe UI",system-ui,sans-serif;--mono:"JetBrains Mono","Fira Code","DejaVu Sans Mono",ui-monospace,monospace;--good:#34d399;--warn:#fbbf24;--bad:#fb7185;--crit:#ff1f5a;--high:#ff8000;--med:#ffd000}
-[data-theme=violet]{--bg:#0e0b1e;--s1:#161230;--s2:#1f1a42;--line:#2e2763;--tx:#ece9ff;--mut:#9a93c9;--acc:#a78bfa;--acc2:#22d3ee;--on:#150b3a}
+:root,[data-theme=violet]{color-scheme:dark;--bg:#0e0b1e;--s1:#161230;--s2:#1f1a42;--line:#2e2763;--tx:#ece9ff;--mut:#9a93c9;--acc:#a78bfa;--acc2:#22d3ee;--on:#150b3a}
 [data-theme=ocean]{--bg:#08171f;--s1:#0e2531;--s2:#133141;--line:#1d4152;--tx:#dcebee;--mut:#7a9ca6;--acc:#4fd1b5;--acc2:#6aa7ff;--on:#04251d}
 [data-theme=ember]{--bg:#170f0c;--s1:#231612;--s2:#321e18;--line:#4a2c22;--tx:#f6e9e3;--mut:#b99a8c;--acc:#fb923c;--acc2:#f43f5e;--on:#2a1103}
-[data-theme=light]{--bg:#f3f5fb;--s1:#fff;--s2:#eceff8;--line:#d5dbea;--tx:#141a30;--mut:#5b6485;--acc:#6d4aff;--acc2:#0891b2;--on:#fff;--good:#059669;--warn:#b45309;--bad:#dc2626;--crit:#be123c;--high:#c2410c;--med:#a16207}
+[data-theme=light]{color-scheme:light;--bg:#f3f5fb;--s1:#fff;--s2:#eceff8;--line:#d5dbea;--tx:#141a30;--mut:#5b6485;--acc:#6d4aff;--acc2:#0891b2;--on:#fff;--good:#059669;--warn:#b45309;--bad:#dc2626;--crit:#be123c;--high:#c2410c;--med:#a16207}
 [data-theme=waves]{--page:#010409;--bg:rgba(0,0,0,.4);--s1:rgba(5,12,22,.42);--s2:rgba(14,30,50,.5);--line:rgba(56,189,248,.25);--tx:#e6f4ff;--mut:#8fb0c7;--acc:#22d3ee;--acc2:#818cf8;--on:#001018}
 [data-theme=waves] header,[data-theme=waves] nav,[data-theme=waves] .card,[data-theme=waves] footer,[data-theme=waves] .tabs{backdrop-filter:blur(10px)}
 [data-theme=waves] .menu div{background:#0b1626}
 [data-theme=waves] .card{background:rgba(5,14,26,.36)}
-*{box-sizing:border-box}html,body{height:100%}body{margin:0;background:var(--page,var(--bg));color:var(--tx);font:14px/1.45 var(--ui);overflow:hidden}
+*{box-sizing:border-box}html,body{height:100%}body{margin:0;background:var(--page,var(--bg,#0e0b1e));color:var(--tx,#ece9ff);font:14px/1.45 var(--ui);overflow:hidden}
 button,input,select{font:inherit;color:inherit}button{cursor:pointer}:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
 svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .app{position:relative;z-index:1;display:grid;grid-template-rows:60px 3px 1fr 28px;height:100vh}
@@ -26,7 +26,7 @@ header{position:relative;z-index:20;display:flex;align-items:center;gap:12px;pad
 select.ghost{padding:8px 10px}.sp{flex:1}.menu{position:relative}
 .menu div{display:none;position:absolute;right:0;top:42px;z-index:9;background:var(--s2);border:1px solid var(--line);border-radius:9px;padding:4px;min-width:170px;box-shadow:0 14px 34px #0007}
 .menu.open div{display:block}.menu div button{display:block;width:100%;text-align:left;background:none;border:0;padding:8px 10px;border-radius:6px}.menu div button:hover{background:var(--line)}
-.bar{background:var(--s1);overflow:hidden}.bar b{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--acc2))}
+.bar{background:var(--s1);overflow:hidden;height:3px}.bar b{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--acc2))}
 .bar.run b{width:35%;animation:ld 1.4s ease-in-out infinite}@keyframes ld{from{margin-left:-35%}to{margin-left:100%}}
 .body{display:grid;grid-template-columns:292px 1fr;min-height:0}
 nav{background:var(--s1);border-right:1px solid var(--line);padding:14px 12px;overflow:auto}
@@ -73,7 +73,20 @@ pre{white-space:pre-wrap;background:var(--bg);border-radius:7px;padding:8px;font
 footer{display:flex;align-items:center;gap:16px;padding:0 16px;background:var(--s1);border-top:1px solid var(--line);color:var(--mut);font-size:12.5px}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--mut)}.dot.running{background:var(--warn)}.dot.done{background:var(--good)}.dot.error{background:var(--bad)}
 #toast{z-index:1000;position:fixed;right:18px;bottom:44px;background:var(--bad);color:#fff;font-weight:600;padding:10px 16px;border-radius:9px;display:none;max-width:420px}
-@media(max-width:1000px){.body{grid-template-columns:1fr;grid-template-rows:auto 1fr}nav{max-height:38vh;border-right:0;border-bottom:1px solid var(--line)}.topo{grid-template-columns:1fr}header{flex-wrap:wrap;height:auto;padding:8px 12px}.app{grid-template-rows:auto 3px 1fr 28px}}
+@media(max-width:1000px){
+html,body{height:auto}body{overflow:auto}
+.app{display:block;height:auto;min-height:100vh;min-height:100dvh}
+header{position:sticky;top:0;flex-wrap:wrap;height:auto;padding:8px 12px;gap:8px}
+.brand{order:1;flex:1;margin:0}#theme{order:2}.menu{order:3}.target{order:4;flex:1 1 100%;max-width:none}.go{order:5;flex:1;justify-content:center}#demo{order:6;flex:1}.sp{display:none}
+.body{display:block}nav{max-height:none;overflow:visible;border-right:0;border-bottom:1px solid var(--line);padding:10px 12px}
+#pf{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}.pf{margin:0}
+main{display:block}.pane{overflow:visible;padding:12px 14px}.top{padding:12px 14px 0;gap:12px 24px}.tabs{padding:8px 14px 0}
+.topo{grid-template-columns:1fr;height:auto}.side{overflow:visible}#map{height:auto;max-height:none;aspect-ratio:600/520}
+.sev{grid-template-columns:repeat(2,1fr)}#tbl,#his,#fnd{overflow-x:auto}
+.sweep{transform-box:view-box}.sweep .wedge{opacity:.18}.sweep .beam{opacity:.55;stroke-width:3}
+footer{position:sticky;bottom:0;z-index:20;flex-wrap:wrap;gap:2px 12px;padding:5px 12px;min-height:28px}
+#toast{left:12px;right:12px;bottom:56px;max-width:none}}
+@media(max-width:600px){#pf{display:flex;overflow-x:auto;gap:6px;padding-bottom:4px;-webkit-overflow-scrolling:touch}.pf{flex:0 0 auto;width:auto;white-space:nowrap;align-items:center;padding:8px 12px}.pf span{display:none}.pf svg{margin-top:0}.lookup>span>small{display:none}.lookup{margin:8px 0 0}.ack{margin:8px 0 0}#map text{font-size:16px}#map .scantxt{font-size:19px}footer span:last-child{display:none}}
 @media print{body{overflow:visible;background:#fff;color:#000}header,nav,.tabs,footer,.bar{display:none}.app,.body{display:block;height:auto}.pane{overflow:visible}.hide{display:block!important}}
 .lookup{display:flex;gap:9px;margin:12px 8px 0;padding:10px;border:1px solid var(--line);border-radius:10px;font-size:12.5px;line-height:1.45;color:var(--mut);cursor:pointer}
 .lookup:has(input:checked){border-color:var(--acc)}.lookup b{color:var(--tx)}.lookup em{color:var(--med);font-style:normal}.lookup small{display:block;margin-top:3px;font-size:12px}
@@ -109,7 +122,7 @@ footer{display:flex;align-items:center;gap:16px;padding:0 16px;background:var(--
 <div class="bar" id="bar"><b></b></div>
 <div class="body">
 <nav><h2>Scan type</h2><div id="pf"></div><div class="adv hide" id="adv"></div>
- <label class="lookup"><input type="checkbox" id="lk"><span><b>Check known vulnerabilities</b> <em>(online)</em><small>Looks up each detected software version at vulners.com and shows CVEs, public exploits and what to do. Sends only software names and versions, never IPs. Not used by Host discovery.</small></span></label>
+ <label class="lookup"><input type="checkbox" id="lk"><span><b>Check known vulnerabilities</b> <em>(online)</em><small>Looks up each detected software version at vulners.com and shows CVEs, public exploits and what to do. Sends only software names and versions, never IPs. Not used by Host discovery. You confirm every time; it applies to the next scan only.</small></span></label>
  <label class="ack"><input type="checkbox" id="ack">I own this network or have written permission to scan it.</label></nav>
 <main>
  <div class="top"><div class="kpi" id="k1">0<small>hosts up</small></div><div class="kpi" id="k2">0<small>open ports</small></div><div class="kpi" id="k3">0<small>findings</small></div><div class="kpi" id="k4">0<small>need attention</small></div></div>
@@ -154,7 +167,7 @@ function bg(on){cancelAnimationFrame(raf);cv.style.display=on?"block":"none";if(
   pts.forEach(p=>{p.x=(p.x+p.vx+cv.width)%cv.width;p.y=(p.y+p.vy+cv.height)%cv.height});
   for(let i=0;i<pts.length;i++){for(let j=i+1;j<pts.length;j++){const d=Math.hypot(pts[i].x-pts[j].x,pts[i].y-pts[j].y);if(d<130){cx.strokeStyle=`rgba(34,211,238,${.45*(1-d/130)})`;cx.lineWidth=1;cx.beginPath();cx.moveTo(pts[i].x,pts[i].y);cx.lineTo(pts[j].x,pts[j].y);cx.stroke()}}cx.fillStyle="rgba(125,211,252,.7)";cx.fillRect(pts[i].x-1.5,pts[i].y-1.5,3,3)}
   if(!still)raf=requestAnimationFrame(f)};raf=requestAnimationFrame(f)}
-function setTheme(v){document.documentElement.dataset.theme=v;$("#theme").value=v;bg(v==="waves");try{localStorage.setItem("mr-theme",v)}catch(e){}}
+function setTheme(v){document.documentElement.dataset.theme=v;document.body.dataset.theme=v;$("#theme").value=v;bg(v==="waves");try{localStorage.setItem("mr-theme",v)}catch(e){}}
 try{setTheme(localStorage.getItem("mr-theme")||"violet")}catch(e){setTheme("violet")}
 $("#theme").onchange=e=>setTheme(e.target.value);
 $("#pf").innerHTML=PF.map(p=>`<button class="pf ${p[4]||""}" aria-pressed="${p[0]==prof}" data-p="${p[0]}"><svg class="i"><use href="#${p[1]}"/></svg><div><b>${p[2]}</b><span>${p[3]}</span></div></button>`).join("");
@@ -173,11 +186,10 @@ const note=ip=>{try{return localStorage.getItem("mr-n-"+ip)||""}catch(e){return"
 document.addEventListener("input",e=>{if(e.target.id==="nt"&&sel)try{localStorage.setItem("mr-n-"+sel,e.target.value)}catch(x){}});
 const toast=(m,ok)=>{const t=$("#toast");t.style.background=ok?"var(--good)":"var(--bad)";t.textContent=m;t.style.display="block";setTimeout(()=>t.style.display="none",m.length>80?10000:5000)};
 const api=(u,b)=>fetch(u,b&&{method:"POST",headers:{"X-Token":TOKEN,"Content-Type":"application/json"},body:JSON.stringify(b)});
-const pref=()=>{try{return localStorage.getItem("mr-lookup")}catch(e){return null}},setPref=v=>{try{localStorage.setItem("mr-lookup",v)}catch(e){}};
 function askLookup(){return new Promise(res=>{const d=document.createElement("div");d.className="modal";
- d.innerHTML=`<div class="box" role="dialog" aria-modal="true" aria-labelledby="mt"><h3 id="mt">Check known vulnerabilities?</h3><p>Meridian can look up every software version it finds (for example <code>vsftpd 2.3.4</code>) in the Vulners database and show known CVEs, public exploits and what to do about them. It runs automatically on every scan that checks ports.</p><p class="mut">This sends only software names and versions to vulners.com, never IP addresses or hostnames, and the nmap script also downloads fingerprint data from GitHub. Results are based on the version text, so some may not apply to patched systems. You can change this any time in the left panel.</p><div class="row"><button class="ghost" id="lkn">Not now</button><button class="go" id="lky">Turn on</button></div></div>`;
+ d.innerHTML=`<div class="box" role="dialog" aria-modal="true" aria-labelledby="mt"><h3 id="mt">Check known vulnerabilities?</h3><p>Meridian can look up every software version it finds (for example <code>vsftpd 2.3.4</code>) in the Vulners database and show known CVEs, public exploits and what to do about them. It applies to the next scan only, and you are asked again every time.</p><p class="mut">This sends only software names and versions to vulners.com, never IP addresses or hostnames, and the nmap script also downloads fingerprint data from GitHub. Results are based on the version text, so some may not apply to patched systems.</p>${window.DEMO_MODE?'<p class="mut">This is the demo: it uses sample data and sends nothing anywhere.</p>':''}<div class="row"><button class="ghost" id="lkn">Not now</button><button class="go" id="lky">Turn on for the next scan</button></div></div>`;
  document.body.appendChild(d);const fin=v=>{document.removeEventListener("keydown",k);d.remove();res(v)},k=e=>{if(e.key==="Escape")fin(false)};
- document.addEventListener("keydown",k);$("#lky").onclick=()=>{setPref("1");$("#lk").checked=true;fin(true)};$("#lkn").onclick=()=>fin(false);$("#lky").focus()})}
+ document.addEventListener("keydown",k);$("#lky").onclick=()=>fin(true);$("#lkn").onclick=()=>fin(false);$("#lky").focus()})}
 const lookupNote=j=>{if(!j.lookup||j.status!=="done")return;const n=j.hosts.reduce((a,h)=>a+h.ports.filter(p=>p.vulns).length,0),c=j.hosts.reduce((a,h)=>a+h.ports.filter(canLook).length,0);
  log.push(new Date().toLocaleTimeString()+" vulnerability lookup: "+(n?pl(n,"port")+" with known issues":c?"nothing found":"no versions to look up"));
  if(!n&&c)toast("No vulnerability data returned. Either nothing is known for these versions, or vulners.com could not be reached.",true)};
@@ -185,11 +197,11 @@ async function start(demo){
  if(last.status==="running")return stop();
  if(!$("#ack").checked){toast("Confirm you are authorized to scan this target.");return}
  const portScan=prof!=="ping"&&!(prof==="custom"&&!opts.sv);let lookup=false;
- if(portScan){const pf=pref();lookup=demo?pf!=="0":pf===null?await askLookup():pf==="1"}
+ if(portScan)lookup=$("#lk").checked
  const body={target:$("#t").value,profile:prof,ack:true,demo,options:opts,lookup};let r=await api("/api/scan",body),d=await r.json();
  if(r.status===409&&d.error==="public"){if(!confirm("This target is outside private address ranges. Scan only systems you are authorized to test. Continue?"))return;r=await api("/api/scan",{...body,public_ok:true});d=await r.json()}
  if(!r.ok){toast(d.error);return}
- jid=d.id;log.push(new Date().toLocaleTimeString()+" scan started: "+body.target+" ("+prof+")");hosts=[];sel=null;last={status:"running"};clearInterval(timer);timer=setInterval(poll,1000);poll()}
+ jid=d.id;$("#lk").checked=false;log.push(new Date().toLocaleTimeString()+" scan started: "+body.target+" ("+prof+")");hosts=[];sel=null;last={status:"running"};clearInterval(timer);timer=setInterval(poll,1000);poll()}
 const stop=()=>jid&&api("/api/stop/"+jid,{});
 async function poll(){const j=await (await fetch("/api/scan/"+jid)).json();if(j.hosts.length>hosts.length)log.push(new Date().toLocaleTimeString()+" found "+j.hosts[j.hosts.length-1].ip);if(j.status!=="running"&&last.status==="running")log.push(new Date().toLocaleTimeString()+" scan "+j.status+" in "+j.elapsed+" s");last=j;hosts=j.hosts;if(j.status!=="running"){clearInterval(timer);if(j.error)toast(j.error);else lookupNote(j)}render()}
 $("#go").onclick=()=>start(false);$("#demo").onclick=()=>{$("#ack").checked=true;$("#go").disabled=false;start(true)};
@@ -263,7 +275,7 @@ setInterval(pollAl,20000);pollAl();
 $("#auto").onclick=async()=>{const d=await (await fetch("/api/net")).json();$("#t").value=d.cidr};
 fetch("/api/history").then(r=>r.json()).then(l=>{$("#rt").innerHTML=[...new Set(l.map(x=>x.target))].map(t=>`<option value="${esc(t)}">`).join("")}).catch(()=>{});
 render();
-{const lk=$("#lk");lk.checked=pref()==="1";lk.onchange=()=>setPref(lk.checked?"1":"0")}
+{const lk=$("#lk");lk.checked=false;lk.onchange=async()=>{if(!lk.checked)return;lk.disabled=true;lk.checked=await askLookup();lk.disabled=false}}
 (async()=>{try{const d=await (await fetch("/api/net")).json();if(d.cidr&&$("#t").value==="192.168.1.0/24")$("#t").value=d.cidr;
 if(d.root===false)toast("Not running as root: host discovery can miss devices (no ARP). For full LAN results restart with: sudo -E \"$(command -v meridian)\"",true)}catch(e){}})();
 </script></body></html>
