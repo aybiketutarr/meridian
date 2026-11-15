@@ -1,4 +1,5 @@
 # Meridian
+
 A live web UI on top of the **nmap** engine: scan profiles, radial topology map, host table, risk scoring, known vulnerabilities and exploits for the software it finds, a trusted-device list that flags unknown devices, scan history with diff and risk trend, watch mode with desktop notifications, and JSON / CSV / Markdown / HTML / Nmap-XML export. Pure Python standard library, **no pip dependencies**. Runs on **Linux, macOS and Windows**, in **English, Türkçe, Deutsch, Español and Français**.
 
 **[Live demo](https://aybiketutarr.github.io/meridian/)** - runs entirely in your browser with sample data (no scanning).  ·  **[Türkçe README](README.tr.md)**
@@ -191,6 +192,8 @@ Start with `meridian --doctor`.
 ```sh
 python3 -m unittest discover -s tests -v
 ```
+Before every push run `python3 tools/preflight.py`: it checks the files, line endings, the generated demo and the version, then runs the tests, so the CI cross is never a surprise.
+
 CI runs the same command on **Ubuntu, macOS and Windows** with Python 3.10 - 3.13 (`.github/workflows/tests.yml`). Most platform logic is tested by faking the platform, so the tests also run everywhere; Windows- and macOS-only system calls (registry, PowerShell shortcut, `ps`) are covered with fakes and need a real machine for a final check.
 
 Releases: the version number lives in `VERSION` at the top of `server.py`. Bump it for every release and tag the same number on GitHub (for example `v0.4.0`).

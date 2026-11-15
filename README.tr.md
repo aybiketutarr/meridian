@@ -192,6 +192,8 @@ Risk puanları açık servislerden ve NSE çıktısından gelen sezgisel değerl
 ```sh
 python3 -m unittest discover -s tests -v
 ```
+Her push'tan önce `python3 tools/preflight.py` çalıştırın: dosyaları, satır sonlarını, üretilen demoyu ve sürümü denetler, sonra testleri çalıştırır; böylece CI'daki kırmızı çarpı sürpriz olmaz.
+
 CI aynı komutu **Ubuntu, macOS ve Windows**'ta Python 3.10 - 3.13 ile çalıştırır (`.github/workflows/tests.yml`). Platform mantığının çoğu platform taklit edilerek test edilir, bu yüzden testler her yerde çalışır; yalnızca Windows ve macOS'a özgü sistem çağrıları (kayıt defteri, PowerShell kısayolu, `ps`) taklitlerle kapsanır ve son kontrol için gerçek makine ister.
 
 Sürümler: sürüm numarası `server.py` başındaki `VERSION` içindedir. Her sürümde artırın ve aynı numarayı GitHub'da etiketleyin (örneğin `v0.4.0`).

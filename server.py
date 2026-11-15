@@ -9,7 +9,7 @@ from http import cookies as http_cookies
 import math
  
 PORT = 0  # chosen at start-up (free port)
-VERSION = "0.4.2"   # bump for every release and tag the same number on GitHub (v0.4.2)
+VERSION = "0.4.4"   # bump for every release and tag the same number on GitHub (v0.4.4)
 TOKEN = secrets.token_urlsafe(16)
 # Local access control. The page and every API call need a session cookie, and the only way to get one is the single-use launch key in the URL that
 # Meridian opens itself (and prints). Another program or another user on the same machine can reach 127.0.0.1, but without the key it can neither
