@@ -191,7 +191,7 @@ class Http(unittest.TestCase):
  
     def test_api_save_rejects_oversized_body(self):
         try: code = self.req("/api/save", {"name": "a.json", "data": "x" * 13_000_000})[0]
-        except urllib.error.URLError: code = 400      # the server refuses without reading the body and closes the connection
+        except (urllib.error.URLError, ConnectionError): code = 400      # the server refuses without reading the body and closes the connection (Windows reports that as ConnectionAbortedError, which urllib does not wrap)
         self.assertEqual(code, 400)
  
     def test_unknown_profile(self):
