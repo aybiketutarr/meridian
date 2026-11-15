@@ -7,7 +7,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
 
 POSIX = os.name != "nt"
-CLEAN = {k: v for k, v in os.environ.items() if k not in ("MERIDIAN_DATA_DIR", "XDG_DATA_HOME", "MERIDIAN_NMAP")}
+_WIN_LEAKY = ("LOCALAPPDATA", "APPDATA", "USERPROFILE", "ProgramFiles", "ProgramFiles(x86)")  # the real CI runner's own values; tests must use the faked self.home instead
+CLEAN = {k: v for k, v in os.environ.items() if k not in ("MERIDIAN_DATA_DIR", "XDG_DATA_HOME", "MERIDIAN_NMAP", *_WIN_LEAKY)}
 def fake_home(d): return mock.patch.object(server.Path, "home", return_value=Path(d))
 class platform:
     """with platform(win=True): pretend to be Windows (or macOS with mac=True); the default is Linux."""
