@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.2 (CI fix)
+* Fixed: `downloads_dir()` compared the unresolved home directory against a *resolved* candidate path. On macOS, `$TMPDIR` (and therefore the test home, and on real machines anything under a symlinked mount) sits under `/var/...`, which resolves to `/private/var/...`; the mismatched prefixes made Meridian silently ignore a configured `XDG_DOWNLOAD_DIR` and fall back to `~/Downloads`. Both sides are now resolved before the containment check.
+* Added `.gitattributes` (`install.sh`/`*.py` forced to LF, `*.bat` to CRLF) to stop line-ending drift when the repo is edited on Windows.
+* Re-applied the executable bit on `install.sh`. If your checkout still fails `test_wrappers`, git itself is tracking the file as non-executable (common after a Windows commit or an editor that rewrites the file) — run once: `chmod +x install.sh && git add install.sh && git commit -m "fix: restore +x on install.sh"`.
+
 ## 0.4.1 (security release)
 Local access control
 * The page and every API call now need a session cookie that is obtained with a single-use launch key (`http://127.0.0.1:PORT/?k=...`, opened and printed by Meridian). Other programs or users on the same machine can no longer fetch the page, read results or start scans. See `SECURITY.md`.
