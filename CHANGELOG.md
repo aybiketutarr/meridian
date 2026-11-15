@@ -1,6 +1,8 @@
 # Changelog
 
-## 0.4.2 (CI fix)
+## 0.4.3 (Windows CI fix)
+* Fixed: the Linux `.desktop` Exec= line and the macOS/Linux shell launcher script always used the host's native path separator when built. This was invisible on Linux/macOS (where native already means forward slashes) but on a real Windows machine it wrote backslash paths into files meant to be read on Linux/macOS — `install.py` now builds both with `.as_posix()` regardless of host.
+* Fixed: the Windows-folder test (`test_platform.Folders.test_windows`) copied the *real* `LOCALAPPDATA`/`APPDATA`/`USERPROFILE`/`ProgramFiles*` of whatever machine ran the tests into its "clean" environment, so on an actual Windows runner the test silently checked against the runner's own real profile instead of the fake one it set up. Those variables are now excluded so the fake home is always used.
 * Fixed: `downloads_dir()` compared the unresolved home directory against a *resolved* candidate path. On macOS, `$TMPDIR` (and therefore the test home, and on real machines anything under a symlinked mount) sits under `/var/...`, which resolves to `/private/var/...`; the mismatched prefixes made Meridian silently ignore a configured `XDG_DOWNLOAD_DIR` and fall back to `~/Downloads`. Both sides are now resolved before the containment check.
 * Added `.gitattributes` (`install.sh`/`*.py` forced to LF, `*.bat` to CRLF) to stop line-ending drift when the repo is edited on Windows.
 * Re-applied the executable bit on `install.sh`. If your checkout still fails `test_wrappers`, git itself is tracking the file as non-executable (common after a Windows commit or an editor that rewrites the file) — run once: `chmod +x install.sh && git add install.sh && git commit -m "fix: restore +x on install.sh"`.
