@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/34874176/README.md)
 # Meridian
 
 A live web UI on top of the **nmap** engine: scan profiles, radial topology map, host table, risk scoring, known vulnerabilities and exploits for the software it finds, a trusted-device list that flags unknown devices, scan history with diff and risk trend, watch mode with desktop notifications, and JSON / CSV / Markdown / HTML / Nmap-XML export. Pure Python standard library, **no pip dependencies**. Runs on **Linux, macOS and Windows**, in **English, Türkçe, Deutsch, Español and Français**.
