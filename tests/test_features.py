@@ -182,7 +182,9 @@ class Live(unittest.TestCase):
         self.assertEqual(self.req("/api/devices")[1], d)
         c, d = self.req("/api/devices", {"key": "nope"}); self.assertEqual((c, d["code"]), (400, "device"))
         self.assertEqual(self.req("/api/devices", raw=b"{not json")[1]["code"], "device")
-        self.assertEqual(self.req("/api/devices", raw=b"x" * 70000)[0], 400)
+        try: code = self.req("/api/devices", raw=b"x" * 70000)[0]
+        except (urllib.error.URLError, ConnectionError): code = 400      # refused without reading the body; macOS and Windows report the closed connection as an error
+        self.assertEqual(code, 400)
         c, d = self.req("/api/devices", {"trust": ["ip:10.0.0.1", "ip:10.0.0.2"]}); self.assertEqual((c, len(d["devices"])), (200, 3))
         self.assertEqual(self.req("/api/devices", {"clear": True})[1], {"devices": {}})
 
