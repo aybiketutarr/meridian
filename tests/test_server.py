@@ -5,6 +5,10 @@ from unittest import mock
  
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
+
+POSIX = os.name != "nt"
+def fake_home(d): return mock.patch.object(server.Path, "home", return_value=Path(d))       # Path.home() reads USERPROFILE on Windows, not HOME
+def linux_layout(): return [mock.patch.object(server, "IS_WIN", False), mock.patch.object(server, "IS_MAC", False)]
  
  
 class Validation(unittest.TestCase):
@@ -44,8 +48,8 @@ class Validation(unittest.TestCase):
  
 class CustomArgs(unittest.TestCase):
     def test_whitelist(self):
-        a = server.custom_args({"timing": 3, "ports": "22,80-90", "sv": True, "scripts": ["vulners", "evil"]})
-        self.assertEqual(a, ["-T3", "-p", "22,80-90", "-sV", "--script", "vulners"])
+        a = server.custom_args({"timing": 3, "ports": "22,80-90", "sv": True, "scripts": ["safe", "vulners", "evil"]})
+        self.assertEqual(a, ["-T3", "-p", "22,80-90", "-sV", "--script", "safe"])        # vulners is never taken from the options (it needs the confirmed lookup)
  
     def test_rejects(self):
         for o in ({"ports": "22;ls"}, {"timing": 9}, {"timing": "x"}):
@@ -82,7 +86,7 @@ class Http(unittest.TestCase):
         cls.srv = ThreadingHTTPServer(("127.0.0.1", 0), server.H)
         server.PORT = cls.srv.server_address[1]
         threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
-        cls.base = f"http://127.0.0.1:{server.PORT}"
+        cls.base = f"http://127.0.0.1:{server.PORT}"; cls.sid = server.new_session()      # what the single-use launch link gives the real window
  
     @classmethod
     def tearDownClass(cls):
@@ -90,8 +94,11 @@ class Http(unittest.TestCase):
  
     def setUp(self): server.JOBS.clear()
  
+    def page(self):
+        return urllib.request.urlopen(urllib.request.Request(self.base + "/", headers={"Cookie": f"{server.COOKIE}={self.sid}"}))
+ 
     def req(self, path, body=None, token=True, host=None):
-        h = {"Content-Type": "application/json", "Origin": self.base}
+        h = {"Content-Type": "application/json", "Origin": self.base, "Cookie": f"{server.COOKIE}={self.sid}"}
         if token: h["X-Token"] = server.TOKEN
         if host: h["Host"] = host
         r = urllib.request.Request(self.base + path, json.dumps(body).encode() if body is not None else None, h)
@@ -101,14 +108,14 @@ class Http(unittest.TestCase):
             return e.code, json.loads(e.read() or b"{}")
  
     def test_index_has_token_and_security_headers(self):
-        with urllib.request.urlopen(self.base + "/") as r:
+        with self.page() as r:
             html = r.read().decode()
             self.assertIn(server.TOKEN, html); self.assertNotIn("__TOKEN__", html)
             self.assertIn("default-src 'self'", r.headers["Content-Security-Policy"])
             self.assertEqual(r.headers["X-Frame-Options"], "DENY")
  
     def test_index_shows_version(self):
-        with urllib.request.urlopen(self.base + "/") as r: html = r.read().decode()
+        with self.page() as r: html = r.read().decode()
         self.assertIn(f"v{server.VERSION}", html); self.assertNotIn("__VERSION__", html)
  
     def test_bad_host_blocked(self):
@@ -176,9 +183,9 @@ class Http(unittest.TestCase):
         self.assertNotIn("vulners", " ".join(args))
  
     def test_api_save_over_http(self):
-        with tempfile.TemporaryDirectory() as d, mock.patch.dict(server.os.environ, {"HOME": d}):
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(server.os.environ, {"HOME": d}), fake_home(d):
             c, r = self.req("/api/save", {"name": "meridian.html", "data": "<p>hi</p>"})
-            self.assertEqual(c, 200); self.assertEqual(Path(r["path"]).read_text(), "<p>hi</p>")
+            self.assertEqual(c, 200); self.assertEqual(Path(r["path"]).read_text(encoding="utf-8"), "<p>hi</p>")
             self.assertEqual(self.req("/api/save", {"name": "x.py", "data": "print(1)"})[0], 400)
             self.assertEqual(self.req("/api/save", {"name": "a.json", "data": "x"}, token=False)[0], 403)
  
@@ -191,9 +198,10 @@ class Http(unittest.TestCase):
         self.assertEqual(self.req("/api/scan", {"demo": True, "profile": "rm -rf", "ack": True})[0], 400)
  
  
+@unittest.skipIf(not POSIX, "the root path (sudo -u, pwd) is POSIX only")
 class RootWindow(unittest.TestCase):
     def test_root_launches_browser_as_sudo_user(self):
-        with mock.patch.object(server.os, "geteuid", return_value=0), \
+        with mock.patch.object(server.os, "geteuid", create=True, return_value=0), \
              mock.patch.dict(server.os.environ, {"SUDO_USER": "alice"}), \
              mock.patch.object(server, "find_browser", return_value="/usr/bin/chromium"), \
              mock.patch.object(server.subprocess, "run", return_value=mock.Mock(returncode=0)) as run:
@@ -205,7 +213,7 @@ class RootWindow(unittest.TestCase):
  
     def test_real_root_without_sudo_user_does_not_launch_browser(self):
         env = {k: v for k, v in server.os.environ.items() if k != "SUDO_USER"}
-        with mock.patch.object(server.os, "geteuid", return_value=0), \
+        with mock.patch.object(server.os, "geteuid", create=True, return_value=0), \
              mock.patch.dict(server.os.environ, env, clear=True), \
              mock.patch.object(server, "find_browser", return_value="/usr/bin/chromium"), \
              mock.patch.object(server.subprocess, "run") as run, \
@@ -220,9 +228,9 @@ class Uninstall(unittest.TestCase):
         for p in (".local/share/meridian-app/server.py", ".local/bin/meridian", ".local/share/applications/meridian.desktop",
                   ".local/share/meridian/history.json", ".local/share/meridian/audit.log", ".local/share/meridian/browser-profile/Default/x"):
             f = self.home / p; f.parent.mkdir(parents=True, exist_ok=True); f.write_text("x")
-        self.patches = [mock.patch.dict(server.os.environ, {"HOME": str(self.home)}),
+        self.patches = [mock.patch.dict(server.os.environ, {"HOME": str(self.home)}), fake_home(self.home), *linux_layout(),
                         mock.patch.object(server, "HIST", self.home / ".local/share/meridian/history.json"),
-                        mock.patch.object(server.os, "geteuid", return_value=1000),
+                        mock.patch.object(server.os, "geteuid", create=True, return_value=1000),
                         mock.patch.object(server.sys, "argv", ["meridian", "--uninstall"]),
                         mock.patch("builtins.print")]
         for p in self.patches: p.start()
@@ -255,7 +263,7 @@ class Uninstall(unittest.TestCase):
         self.assertFalse(self.gone(".local/bin/meridian")); self.assertFalse(self.gone(".local/share/meridian/history.json"))
  
     def test_refuses_under_root(self):
-        with mock.patch.object(server.os, "geteuid", return_value=0): self.assertEqual(server.uninstall(), 1)
+        with mock.patch.object(server.os, "geteuid", create=True, return_value=0): self.assertEqual(server.uninstall(), 1)
         self.assertFalse(self.gone(".local/bin/meridian"))
  
     def test_nothing_installed(self):
@@ -269,7 +277,7 @@ class PersistentProfile(unittest.TestCase):
     def test_window_uses_persistent_profile_dir(self):
         with tempfile.TemporaryDirectory() as d, \
              mock.patch.object(server, "HIST", Path(d) / "meridian" / "history.json"), \
-             mock.patch.object(server.os, "geteuid", return_value=1000), \
+             mock.patch.object(server.os, "geteuid", create=True, return_value=1000), \
              mock.patch.dict(sys.modules, {"webview": None}), \
              mock.patch.object(server, "find_browser", return_value="/usr/bin/chromium"), \
              mock.patch.object(server.subprocess, "run") as run:
@@ -371,7 +379,7 @@ def ET_vulners(rows):
 class SaveExport(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(); self.home = Path(self.tmp.name)
-        self.p = [mock.patch.dict(server.os.environ, {"HOME": str(self.home)}), mock.patch.object(server, "HIST", self.home / "m" / "history.json")]
+        self.p = [mock.patch.dict(server.os.environ, {"HOME": str(self.home)}), fake_home(self.home), mock.patch.object(server, "HIST", self.home / "m" / "history.json")]
         for x in self.p: x.start()
  
     def tearDown(self):
@@ -380,12 +388,12 @@ class SaveExport(unittest.TestCase):
  
     def test_saves_into_downloads_with_private_permissions(self):
         r = server.save_export({"name": "meridian.json", "data": '{"a": 1}'}); f = Path(r["path"])
-        self.assertEqual(f.parent, self.home / "Downloads"); self.assertEqual(f.read_text(), '{"a": 1}')
-        self.assertEqual(f.stat().st_mode & 0o777, 0o600); self.assertRegex(f.name, r"^meridian-\d{8}-\d{6}\.json$")
+        self.assertEqual(f.parent, self.home / "Downloads"); self.assertEqual(f.read_text(encoding="utf-8"), '{"a": 1}')
+        (not POSIX or self.assertEqual(f.stat().st_mode & 0o777, 0o600)); self.assertRegex(f.name, r"^meridian-\d{8}-\d{6}\.json$")
  
     def test_never_overwrites(self):
         a = server.save_export({"name": "meridian.csv", "data": "1"})["path"]; b = server.save_export({"name": "meridian.csv", "data": "2"})["path"]
-        self.assertNotEqual(a, b); self.assertEqual(Path(a).read_text(), "1")
+        self.assertNotEqual(a, b); self.assertEqual(Path(a).read_text(encoding="utf-8"), "1")
  
     def test_rejects_bad_names_and_data(self):
         for bad in ({"name": "evil.sh", "data": "x"}, {"name": "x.exe", "data": "x"}, {"name": "noext", "data": "x"},
@@ -405,7 +413,7 @@ class SaveExport(unittest.TestCase):
         self.assertEqual(Path(server.save_export({"name": "a.md", "data": "x"})["path"]).parent, self.home / "Downloads")
  
     def test_file_goes_to_the_sudo_user(self):
-        with mock.patch.object(server.os, "geteuid", return_value=0), mock.patch.dict(server.os.environ, {"SUDO_UID": "1234", "SUDO_GID": "1235"}), \
+        with mock.patch.object(server.os, "geteuid", create=True, return_value=0), mock.patch.dict(server.os.environ, {"SUDO_UID": "1234", "SUDO_GID": "1235"}), \
              mock.patch.object(server.os, "chown") as chown:
             f = server.save_export({"name": "a.json", "data": "x"})["path"]
         chown.assert_any_call(Path(f), 1234, 1235)   # the export; the data dir and audit log are handed over too
@@ -414,7 +422,7 @@ class SaveExport(unittest.TestCase):
 class Version(unittest.TestCase):
     def run_cli(self, *args):
         import subprocess
-        return subprocess.run([sys.executable, str(Path(server.__file__)), *args], capture_output=True, text=True, timeout=20)
+        return subprocess.run([sys.executable, str(Path(server.__file__)), *args], capture_output=True, text=True, encoding="utf-8", timeout=20)
  
     def test_version_is_semver(self):
         self.assertRegex(server.VERSION, r"^\d+\.\d+\.\d+$")
@@ -430,7 +438,7 @@ class Version(unittest.TestCase):
     def test_version_flag_has_no_side_effects(self):
         with tempfile.TemporaryDirectory() as home:
             import subprocess
-            subprocess.run([sys.executable, server.__file__, "--version"], env={"HOME": home, "PATH": "/usr/bin:/bin"}, capture_output=True, timeout=20)
+            subprocess.run([sys.executable, server.__file__, "--version"], env={"HOME": home, "USERPROFILE": home, "LOCALAPPDATA": home, "PATH": "/usr/bin:/bin", **({"SYSTEMROOT": os.environ["SYSTEMROOT"]} if "SYSTEMROOT" in os.environ else {})}, capture_output=True, timeout=20)
             self.assertEqual(list(Path(home).iterdir()), [])        # no history, no audit log, no folders
  
  
@@ -454,6 +462,7 @@ def alive(pid):
     except ProcessLookupError: return False
 
 
+@unittest.skipIf(not POSIX, "process groups, file modes and shell-script stand-ins for nmap are POSIX only")
 class Hardening(unittest.TestCase):
     """Singleton manager, private scratch directory (CWE-377), process groups, bounded disk use."""
     def setUp(self):
@@ -523,7 +532,7 @@ class Hardening(unittest.TestCase):
     def test_stop_kills_the_whole_group_and_reaps_it(self):
         jid = server.MANAGER.submit("10.0.0.1", "quick", ["-T4"]); job = server.JOBS[jid]
         self.assertTrue(self.wait_for(lambda: job.get("proc") and Path(job["xml"] + ".child").exists()))
-        proc, child = job["proc"], int(Path(job["xml"] + ".child").read_text())
+        proc, child = job["proc"], int(Path(job["xml"] + ".child").read_text(encoding="utf-8"))
         self.assertTrue(alive(child))
         self.assertTrue(server.MANAGER.stop(jid))
         self.assertTrue(self.wait_for(lambda: job["status"] == "stopped" and "proc" not in job))
@@ -602,7 +611,7 @@ class Hardening(unittest.TestCase):
     def test_audit_never_follows_a_symlink(self):
         d = server.data_dir(); victim = self.dir / "victim.txt"; victim.write_text("keep")
         os.symlink(victim, d / "audit.log"); server.audit("x")
-        self.assertEqual(victim.read_text(), "keep")
+        self.assertEqual(victim.read_text(encoding="utf-8"), "keep")
 
     def test_audit_log_rotates(self):
         with mock.patch.object(server, "AUDIT_MAX", 60):
@@ -613,7 +622,7 @@ class Hardening(unittest.TestCase):
 
 class UiContract(unittest.TestCase):
     """Static checks on the single-file UI (no browser needed)."""
-    html = (Path(server.__file__).parent / "index.html").read_text()
+    html = (Path(server.__file__).parent / "index.html").read_text(encoding="utf-8")
 
     def test_vulnerability_check_asks_every_time(self):
         self.assertNotIn("mr-lookup", self.html)                       # nothing is remembered between runs
@@ -623,5 +632,5 @@ class UiContract(unittest.TestCase):
         import importlib.util
         spec = importlib.util.spec_from_file_location("build_demo", Path(server.__file__).parent / "tools" / "build_demo.py")
         m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
-        self.assertEqual(m.build(), (Path(server.__file__).parent / "docs" / "index.html").read_text(),
+        self.assertEqual(m.build(), (Path(server.__file__).parent / "docs" / "index.html").read_text(encoding="utf-8"),
                          "docs/index.html is out of date: run  python3 tools/build_demo.py")
