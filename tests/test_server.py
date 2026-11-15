@@ -413,11 +413,11 @@ class SaveExport(unittest.TestCase):
         self.assertEqual(Path(server.save_export({"name": "a.md", "data": "x"})["path"]).parent, self.home / "Downloads")
  
     def test_file_goes_to_the_sudo_user(self):
-        with mock.patch.object(server.os, "geteuid", create=True, return_value=0), mock.patch.dict(server.os.environ, {"SUDO_UID": "1234", "SUDO_GID": "1235"}), \
-             mock.patch.object(server.os, "chown") as chown:
-            f = server.save_export({"name": "a.json", "data": "x"})["path"]
-        chown.assert_any_call(Path(f), 1234, 1235)   # the export; the data dir and audit log are handed over too
- 
+        with mock.patch.object(server.os, "geteuid", create=True, return_value=0), \
+     mock.patch.dict(server.os.environ, {"SUDO_UID": "1234", "SUDO_GID": "1235"}), \
+     mock.patch.object(server.os, "chown", create=True) as chown:
+    f = server.save_export({"name": "a.json", "data": "x"})["path"]
+chown.assert_any_call(Path(f), 1234, 1235)
  
 class Version(unittest.TestCase):
     def run_cli(self, *args):
