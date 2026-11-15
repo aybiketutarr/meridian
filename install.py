@@ -16,9 +16,10 @@ import server  # noqa: E402  (importing it has no side effects)
 def say(key, **kw): print(server.T(key, **kw))
 
 def sh_launcher(py, app):
-    """POSIX launcher: the Python that ran the installer (so GUI starts work without a PATH), else python3."""
-    return ("#!/usr/bin/env sh\n" f"PY={shlex.quote(str(py))}\n" '[ -x "$PY" ] || PY=python3\n'
-            f'exec "$PY" {shlex.quote(str(Path(app) / "server.py"))} "$@"\n')
+    """POSIX launcher: the Python that ran the installer (so GUI starts work without a PATH), else python3.
+    Always forward slashes: this script runs on Linux/macOS even when the installer itself was built on Windows."""
+    return ("#!/usr/bin/env sh\n" f"PY={shlex.quote(Path(py).as_posix())}\n" '[ -x "$PY" ] || PY=python3\n'
+            f'exec "$PY" {shlex.quote((Path(app) / "server.py").as_posix())} "$@"\n')
 
 def copy_app(src, app):
     for name in (*server.APP_FILES, *server.APP_DIRS):
@@ -36,7 +37,9 @@ def write_launcher(P, py, app):
     else:
         L.write_text(sh_launcher(py, app), encoding="utf-8"); L.chmod(0o755)
 
-def desk_quote(p): return '"' + str(p).replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$").replace("`", "\\`").replace("%", "%%") + '"'
+def desk_quote(p):
+    """.desktop Exec= value. Always forward slashes: this file is read by a Linux desktop even when built on Windows."""
+    return '"' + Path(p).as_posix().replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$").replace("`", "\\`").replace("%", "%%") + '"'
 
 def make_linux_menu(P, launcher, src):
     desk, icon = P["menu"]
