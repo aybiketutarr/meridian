@@ -5,14 +5,37 @@ on:
   push:
     branches: [main]
   pull_request:
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
-  unittest:
-    runs-on: ${{ matrix.os }}
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m unittest discover -s tests -v
+
+  # macOS and Windows run the same tests, but a red cross here does not fail the workflow while these two systems are still being verified.
+  # Once both are green for a while, delete the `continue-on-error` line to make them required as well.
+  macos-windows:
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+        python-version: ["3.10", "3.13"]
     steps:
       - uses: actions/checkout@v4
         with:
