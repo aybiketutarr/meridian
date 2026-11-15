@@ -1,177 +1,208 @@
+[README.md](https://github.com/user-attachments/files/34874176/README.md)
 # Meridian
- 
-A live web UI on top of the **nmap** engine: scan profiles, radial topology map, host table, risk scoring, known vulnerabilities and exploits for the software it finds, scan history with diff, watch mode and JSON / CSV / Markdown / HTML / Nmap-XML export. Pure Python standard library, **no pip dependencies**.
- 
-**[Live demo](https://aybiketutarr.github.io/meridian/)** - runs entirely in your browser with sample data (no scanning).
- 
+
+A live web UI on top of the **nmap** engine: scan profiles, radial topology map, host table, risk scoring, known vulnerabilities and exploits for the software it finds, a trusted-device list that flags unknown devices, scan history with diff and risk trend, watch mode with desktop notifications, and JSON / CSV / Markdown / HTML / Nmap-XML export. Pure Python standard library, **no pip dependencies**. Runs on **Linux, macOS and Windows**, in **English, Türkçe, Deutsch, Español and Français**.
+
+**[Live demo](https://aybiketutarr.github.io/meridian/)** - runs entirely in your browser with sample data (no scanning).  ·  **[Türkçe README](README.tr.md)**
+
 > **Use responsibly.** Scan only networks you own or have explicit permission to test.
- 
-## Installation (Linux, step by step)
- 
-Tested on Kali Linux. Works on Debian/Ubuntu-based systems too. Run every command in a terminal as your **normal user** (not root, do not log in as root).
- 
-### Step 1 - Install the required packages
+
+## What is new in 0.4.0
+
+* **Languages:** English, Türkçe, Deutsch, Español, Français. Meridian always starts in **English**; switch the language any time in the header and it is remembered. For the terminal messages (`--help`, `--doctor`, installer) use `--lang tr` or `MERIDIAN_LANG=tr`. Adding a language means adding one file ([how](#adding-a-language)).
+* **Linux, macOS and Windows:** one installer (`install.py`), proper data folders per system, a Start Menu entry on Windows, a `Meridian.app` on macOS, nmap and browser auto-detection.
+* **Trusted devices:** mark the devices you know; every other device is flagged **UNKNOWN** on the map, in the table, in the findings and in watch alerts.
+* **Offline hints:** a small built-in list of famous vulnerable releases (vsftpd 2.3.4, Apache 2.4.49, Heartbleed, ...). Nothing leaves your machine.
+* **Risk trend** chart in History, optional **desktop notifications** for watch alerts, localized HTML / Markdown reports.
+* **`meridian --doctor`** checks Python, nmap, privileges, browser and folders and tells you how to fix what is missing.
+
+## Installation
+
+Needs **Python 3.10 or newer** and, for real scans, **nmap**. No Python packages. Everything installs for your own user: no root, no administrator. Without nmap you can still try everything with **Sample data**.
+
+| | Linux | macOS | Windows |
+|---|---|---|---|
+| nmap | `sudo apt install nmap` | `brew install nmap` | installer from [nmap.org](https://nmap.org/download.html) (includes Npcap) |
+| Install | `python3 install.py` (or `sh install.sh`) | `python3 install.py` | double-click `install.bat` (or `py install.py`) |
+| Start | `meridian` | `meridian` or open **Meridian** from Launchpad | `meridian` or **Meridian** in the Start Menu |
+| Full LAN results | `sudo -E "$(command -v meridian)"` | `sudo -E meridian` | terminal as **Administrator**, then `meridian` |
+| Data folder | `~/.local/share/meridian` | `~/Library/Application Support/Meridian` | `%LOCALAPPDATA%\Meridian` |
+| App window | Chromium / Chrome / Brave / Edge | Chrome / Edge / Brave / Chromium | Edge (always there) / Chrome / Brave |
+
+Without a Chromium-family browser Meridian opens your default browser instead.
+
+### Linux (step by step)
+
+Tested on Kali Linux; works on Debian and Ubuntu too. Use your **normal user** (not root).
+
 ```sh
 sudo apt update
-sudo apt install -y git python3 nmap chromium
-```
-`chromium` is only needed for the standalone app window. Without it, Meridian opens your default browser. On Ubuntu the package may be called `chromium-browser` (or use Google Chrome).
- 
-### Step 2 - Check the versions
-```sh
-whoami
-python3 --version
-nmap --version
-```
-`whoami` must **not** print `root`. Python must be **3.10 or newer**.
- 
-### Step 3 - Download Meridian
-```sh
-cd ~
+sudo apt install -y git python3 nmap chromium      # chromium is optional (app window); on Ubuntu: chromium-browser
 git clone https://github.com/aybiketutarr/meridian.git
 cd meridian
-ls
-```
-You should see `server.py`, `index.html`, `install.sh`, `tests` and more.
- 
-### Step 4 - Run the self-tests (optional but recommended)
-```sh
-python3 -m unittest discover -s tests
-```
-The last line must say `OK`.
- 
-### Step 5 - Install the `meridian` command
-```sh
-sh install.sh
-```
-This copies the app to `~/.local/share/meridian-app`, creates the `meridian` command in `~/.local/bin` and adds a menu entry. No root needed.
- 
-If the next step says `command not found: meridian`, add the folder to your PATH once:
-```sh
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc    # Kali (zsh)
-# bash users: use ~/.bashrc instead of ~/.zshrc
-source ~/.zshrc
-```
- 
-### Step 6 - Start Meridian
-```sh
+python3 -m unittest discover -s tests              # optional; the last line must say OK
+python3 install.py                                  # installs the 'meridian' command and a menu entry
 meridian
 ```
-The app window opens. Keep the terminal open while you use it; closing the window ends the program.
- 
-### Step 7 - Run your first scan
-1. Click the **auto** button next to the target box (it fills in your local network, for example `192.168.1.0/24`).
-2. Tick the authorization checkbox (you confirm you may scan this network).
-3. Choose **Quick** and press **Scan**.
-4. Hosts appear in the table and on the topology map.
-No nmap yet? Click **Try with sample data** to see the full UI.
- 
-### Step 8 - Full results with root (recommended on a LAN)
-Without root, nmap cannot use ARP and misses phones, TVs and firewalled devices. Close Meridian (Ctrl+C in the terminal) and start it like this:
+
+If `meridian` is "command not found", add `~/.local/bin` to your PATH once:
 ```sh
-sudo -E "$(command -v meridian)"
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc    # bash users: ~/.bashrc
+source ~/.zshrc
 ```
-Type your password when asked. Meridian is still opened as **your** user, only the scanning gets root rights. Run the same scan again: you should now see more devices, with MAC vendors and OS guesses.
- 
-### Using a VirtualBox VM?
-Set **Settings -> Network -> Adapter 1 -> Attached to: Bridged Adapter** and pick the network card your PC is really using (Wi-Fi or Ethernet). On Wi-Fi also set **Advanced -> Promiscuous Mode: Allow All**. With NAT, the VM only sees its own virtual network.
- 
-### Check the version and options
+
+### macOS
+
+```sh
+brew install nmap                  # Homebrew: https://brew.sh
+git clone https://github.com/aybiketutarr/meridian.git && cd meridian
+python3 install.py
+meridian                           # or open Meridian from Launchpad / Spotlight
+```
+`python3` comes with the Xcode command line tools, or install it from python.org. The installer creates `~/Applications/Meridian.app` and the `meridian` command in `~/.local/bin` (add that folder to your PATH if the shell does not find it). For ARP discovery, OS detection and traceroute start with `sudo -E meridian`.
+
+### Windows
+
+1. Install **Python 3.10+** from [python.org](https://www.python.org/downloads/) (tick *Add python.exe to PATH*) and **nmap** from [nmap.org](https://nmap.org/download.html).
+2. Download or clone Meridian, then double-click **`install.bat`** (or run `py install.py` in a terminal).
+3. Open a **new** terminal and run `meridian`, or use **Meridian** in the Start Menu.
+
+The installer adds its folder to your *user* PATH (no administrator needed; use `--no-path` to skip). For ARP discovery, OS detection and traceroute, open the terminal with **Run as administrator**. Windows Defender Firewall may ask once whether nmap may use the network.
+
+### Check your setup
+
+```sh
+meridian --doctor           # add --lang tr (or de, es, fr) for another language
+```
+It lists Python, nmap, scan privileges, browser, data folder and port, and says how to fix each problem.
+
+### Version, options, update, remove
+
 ```sh
 meridian --version
 meridian --help
 ```
-The version is also shown at the bottom right of the app window.
- 
-### Update
+Update: `git pull`, then `python3 install.py` again (it replaces the app copy and keeps your data). Remove:
 ```sh
-cd ~/meridian
-git pull
-sh install.sh
+meridian --uninstall              # removes the command, the app copy, the menu entry AND your saved data
+meridian --uninstall --keep-data  # keeps the data; add --yes to skip the question
 ```
- 
-### Remove
-```sh
-meridian --uninstall
-```
-Lists what it will delete, asks for confirmation, then removes the command, the app copy, the menu entry **and your saved data** (scan history, audit log, browser profile with theme, presets and notes in `~/.local/share/meridian`). To remove only the application and keep your data:
-```sh
-meridian --uninstall --keep-data
-```
-Run it as your normal user, without sudo. Add `--yes` to skip the confirmation question.
- 
+Run it as your normal user, without sudo.
+
 ### Without installing
+
 ```sh
-python3 server.py            # or: python3 server.py --serve
+python3 server.py            # or: python3 server.py --serve   (no window; prints the URL)
 ```
-`--serve` runs without a window and prints a URL such as `http://127.0.0.1:44959` to open in your browser. Meridian uses port 8765 (so your theme, presets and notes are remembered between runs) and falls back to a free port if that one is busy. Set `MERIDIAN_PORT` to choose another one.
- 
-### Docker (optional)
+Meridian uses port 8765 (so theme, presets and notes are remembered) and falls back to a free port if it is busy. Environment: `MERIDIAN_PORT`, `MERIDIAN_LANG`, `MERIDIAN_NMAP` (path to nmap), `MERIDIAN_DATA_DIR` (where saved data lives).
+
+### Docker (optional, Linux)
+
 ```sh
 docker build -t meridian .
-docker run --rm --net=host meridian     # then open http://127.0.0.1:8765
+docker run --rm --net=host -e MERIDIAN_LANG=tr meridian     # then open the link printed in the log (http://127.0.0.1:8765/?k=..., it works once)
 ```
-`--net=host` (Linux) is required because Meridian only listens on `127.0.0.1`. The container runs as a non-root user, so OS detection and raw-socket scans are limited.
- 
+`--net=host` is required because Meridian only listens on `127.0.0.1`. Docker Desktop on Windows and macOS runs containers inside a virtual machine and cannot see your real network: install Meridian natively there.
+
+### First scan
+
+1. Click **Auto** next to the target box (it fills in your local network, for example `192.168.1.0/24`).
+2. Tick the authorization checkbox.
+3. Choose **Quick** and press **Scan**.
+
+On a VirtualBox VM set the adapter to **Bridged**; with NAT the VM only sees its own virtual network.
+
+## Languages
+
+Meridian starts in English. A different language is used only if you choose it in the header (remembered) or start with `--lang` / `MERIDIAN_LANG`; the browser or system language is not used. Reports you export (HTML, Markdown) use the language you see. Machine-readable output (JSON, CSV headers, the audit log) stays in English on purpose.
+
+### Adding a language
+
+Copy `locales/en.json` to `locales/<code>.json` (for example `pt.json`), translate the values, set `_name` to the language's own name. Keep the `{placeholders}` and the `_one` / `_other` pairs. Nothing else to change: the file is picked up by the app, the terminal messages, the installer and the demo build. `python3 -m unittest tests.test_i18n` checks that no key or placeholder is missing. Right-to-left languages are not supported yet.
+
 ## Features
- 
+
 * Quick / Services / Full / OS / Vuln / Traceroute / Custom scans (validated options, no raw nmap arguments), stop button
 * Risk scoring (Critical / High / Medium / Low) and findings, device-type guess, MAC vendor
-* **Known vulnerabilities (optional, online):** every port that is scanned gets its software version checked for CVEs and public exploits, with a recommended action ([details](#vulnerability-lookup))
+* **Known vulnerabilities (optional, online):** software versions checked for CVEs and public exploits, with a recommended action ([details](#vulnerability-lookup))
+* **Offline hints (optional):** matched locally against a small built-in list, nothing is sent ([details](#offline-hints))
+* **Trusted devices:** a list that survives restarts; unknown devices are flagged everywhere ([details](#trusted-devices))
 * Radial topology map, sortable and filterable host table, per-host notes, saved Custom presets
-* Scan history (stored locally) with a diff between two scans
-* Watch mode: re-scan a target every 5 min to 6 h and get alerts for new hosts, new ports and vanished hosts (works while Meridian is open)
-* Export: JSON, CSV, Markdown, HTML, PDF (print), raw Nmap XML, copy IP list. Files are saved straight into your Downloads folder (a message shows the exact path), so no extra browser download window opens
-* 4 themes, including *Waves* (animated background, static if reduced motion is on)
+* Scan history (stored locally) with a diff between two scans and a **risk trend** for repeated scans of the same target
+* Watch mode: re-scan a target every 5 min to 6 h and get alerts for new hosts, unknown devices, new ports and vanished hosts, optionally as **desktop notifications** (works while Meridian is open)
+* Export: JSON, CSV, Markdown, HTML, PDF (print), raw Nmap XML, copy IP list. Files are saved straight into your Downloads folder (a message shows the exact path)
+* 5 themes, including *Waves* (animated background, static if reduced motion is on)
+
 ### Accepted targets
 IPv4 address, CIDR (up to `/22`), last-octet range (`192.168.1.10-50`) or hostname. Separate several with spaces or commas (max 32 targets, 1024 addresses in total). IPv6 is not supported yet.
- 
+
+## Trusted devices
+
+Open a device on the map and tick **Trusted device** (optionally give it a name), or press **Trust all found devices** on the Hosts tab to take today's network as your baseline. From then on:
+
+* every device that is *not* trusted gets an **UNKNOWN** badge, a dashed ring on the map, a "Device not in your trusted list" finding (Medium) and is counted in a fifth counter;
+* in watch mode a new device outside the list raises an **UNKNOWN DEVICE** alert instead of a plain "new host".
+
+Devices are recognised by **MAC address** when nmap sees one (run as root / Administrator on your LAN), otherwise by IP address, which can change. The list is stored in `devices.json` in the data folder (private file, atomic writes). Without any trusted device nothing is flagged, so there is no noise until you decide to use it.
+
+## Offline hints
+
+Tick **Offline hints** and the scan also detects service versions (like the Services profile) and compares them with a small list inside Meridian: vsftpd 2.3.4 backdoor, Apache 2.4.49 / 2.4.50 path traversal, OpenSSH 7.7 and older user enumeration, Samba "SambaCry", Exim 4.87-4.91, OpenSSL "Heartbleed" 1.0.1-1.0.1f, UnrealIRCd 3.2.8.1 backdoor and ProFTPD 1.3.5 mod_copy. **Nothing is sent anywhere** and no confirmation is needed. Hints are marked OFFLINE and can be combined with the online lookup (each CVE is listed once). This is a short list of famous cases, not a vulnerability database: no hint does not mean safe. As with the online lookup, a distribution may have patched the software without changing its version number.
+
 ## Vulnerability lookup
- 
+
 When it is turned on, every scan that checks ports (Quick, Services, Full TCP, OS, Traceroute, Vulnerability and Custom with version detection) does two extra things:
- 
+
 1. nmap detects the **software and version** behind each open port (`-sV`; Quick and Traceroute use the fast `--version-light`).
 2. The `vulners` NSE script that ships with nmap looks that software up at vulners.com and returns **CVEs, CVSS scores and whether public exploit code exists**.
-Meridian shows the result under each port in the host panel (worst first), adds a finding with a **recommended action**, raises the host's risk score, and includes the CVEs in the JSON, CSV, Markdown and HTML exports. **Host discovery never runs it**, because it does not check ports.
- 
-**Turning it on.** Every time you tick **Check known vulnerabilities (online)** in the left panel, a warning window explains what is sent and asks you to confirm. The confirmation counts for the next scan only: the box clears itself when that scan starts, and nothing is remembered between runs.
- 
+
+Meridian shows the result under each port in the host panel (worst first), adds a finding with a **recommended action**, raises the host's risk score, and includes the CVEs in the exports. **Host discovery never runs it**, because it does not check ports.
+
+**Turning it on.** Every time you tick **Check known vulnerabilities (online)**, a warning window explains what is sent and asks you to confirm. The confirmation counts for the next scan only: the box clears itself when that scan starts, and nothing is remembered between runs.
+
 **What leaves your machine.** Only software names and versions (for example `vsftpd 2.3.4`) go to vulners.com, never IP addresses or hostnames. The nmap script also downloads its fingerprint data from GitHub. No API key is needed or used.
- 
+
 **What it does not tell you**
-* Matches come from the **version text**, so they are "possible", not confirmed. Distributions such as Debian and Ubuntu patch software without changing the version number, so an old-looking version can already be fixed.
+* Matches come from the **version text**, so they are "possible", not confirmed. Distributions such as Debian and Ubuntu patch software without changing the version number.
 * The lookup does not report **which version fixes** an issue. Use the advisory link or your package manager (for example `apt changelog <package>`).
-* Nothing is found when nmap cannot read a version number (a banner such as `nginx` without a number). The panel says so for that port.
-* Without an API key the data has no CISA "actively exploited" flag; public-exploit flags and CVSS are included. A free vulners.com key adds that flag, and Meridian never spends API credits.
+* Nothing is found when nmap cannot read a version number. The panel says so for that port.
+* Without an API key the data has no CISA "actively exploited" flag; public-exploit flags and CVSS are included. Meridian never spends API credits.
 * Meridian only **reports** that exploits exist. It does not run or download exploit code.
+
 ## Security model
-Localhost-only binding, per-run token (constant-time compare), Host and Origin checks, strict CSP, whitelisted scan options, strict target validation, one scan at a time (enforced by a single `ScanManager`), 1-hour scan limit, public-target confirmation, authorization checkbox before every scan, and a local audit log at `~/.local/share/meridian/audit.log` (rotated at 1 MB; history is stored with `0600` permissions). Scratch files live in a private `0700` directory with a random name (never a fixed name in `/tmp`), and every nmap runs in its own process group that is stopped and reaped on stop, time limit, exit and crash recovery. See [SECURITY.md](SECURITY.md).
- 
+Localhost-only binding, per-run token (constant-time compare), Host and Origin checks, strict CSP, whitelisted scan options, strict target validation, one scan at a time (a single `ScanManager`), 1-hour scan limit, public-target confirmation, authorization checkbox before every scan, and a local audit log in the data folder (rotated at 1 MB; history, devices and the audit log are private files). Scratch files live in a private directory with a random name, and every nmap runs in its own process group (Windows: process tree) that is stopped and reaped on stop, time limit, exit and crash recovery. On Windows the port is bound exclusively, so no other program can share it. See [SECURITY.md](SECURITY.md).
+
 Risk scores are heuristics from exposed services and NSE output, not a substitute for a professional assessment.
- 
+
 ## Troubleshooting
- 
-* **Only a few hosts are found on my LAN.** Run with root (Step 8). Also check that the target is *your* network (the **auto** button fills it in) and, inside a VM, that the adapter is **Bridged**. Some routers hide devices from each other (AP / client isolation).
+
+Start with `meridian --doctor`.
+
+* **Only a few hosts are found on my LAN.** Run with root / Administrator (table above). Also check that the target is *your* network (**Auto**) and, inside a VM, that the adapter is **Bridged**. Some routers hide devices from each other (AP / client isolation).
+* **`nmap: NOT FOUND`** in the start-up line: install nmap (table above). On Windows open a *new* terminal after installing it; Meridian also looks in `C:\Program Files (x86)\Nmap`. You can point to any nmap with `MERIDIAN_NMAP`.
+* **`command not found: meridian`** (Linux, macOS): add `~/.local/bin` to your PATH. **Windows:** open a new terminal after installing.
+* **No app window, a normal browser tab opens:** no Chromium-family browser was found. Install Chrome, Edge or Brave, or just use the tab.
+* **macOS: "Meridian.app" does not open from Finder.** Start `meridian` once in a terminal and read the message; `meridian --doctor` shows what is missing.
 * **`vaInitialize failed` or other Chromium messages in the terminal** are harmless GPU warnings from the browser.
-* **`Running as root without --no-sandbox`**: fixed in current versions (the window is opened as the user who ran `sudo`). If you log in as a real root user, open the printed URL in a normal browser instead.
-* **No vulnerabilities are listed for a port.** The panel says why: "No version number detected" means nmap could not read a version (nothing to look up); "No known vulnerabilities returned" means the lookup ran and found nothing for that version. If a scan shows "No vulnerability data returned", check that the machine can reach vulners.com. Windows services often have no usable version-to-CVE mapping.
-* **`command not found: meridian`**: add `~/.local/bin` to your PATH (see Step 5).
-* **`nmap: NOT FOUND`** in the start-up line: run `sudo apt install nmap`.
+* **Window opened as root:** Meridian opens the window as the user who ran `sudo`. If you log in as a real root user, open the printed URL in a normal browser.
+* **No vulnerabilities are listed for a port.** The panel says why: "No version number detected" means nothing to look up; "No known vulnerabilities returned" means the lookup ran and found nothing. If a scan shows "No vulnerability data returned", check that the machine can reach vulners.com.
+* **Garbled letters in a Windows console:** Meridian switches its output to UTF-8; if your console font lacks a letter, use Windows Terminal.
+
 ## Development
- 
+
 ```sh
 python3 -m unittest discover -s tests -v
 ```
-CI runs the same command on Python 3.10 - 3.13 (`.github/workflows/tests.yml`).
- 
-Releases: the version number lives in `VERSION` at the top of `server.py`. Bump it for every release and tag the same number on GitHub (for example `v0.3.0`).
- 
-Layout: `server.py` (HTTP server, `ScanManager`, nmap runner, XML parser, validation), `index.html` (single-file UI), `docs/` (browser-only demo), `tools/build_demo.py`, `tests/`, `install.sh`, `Dockerfile`.
+CI runs the same command on **Ubuntu, macOS and Windows** with Python 3.10 - 3.13 (`.github/workflows/tests.yml`). Most platform logic is tested by faking the platform, so the tests also run everywhere; Windows- and macOS-only system calls (registry, PowerShell shortcut, `ps`) are covered with fakes and need a real machine for a final check.
 
-The demo `docs/index.html` is **generated** from `index.html` and `docs/demo-shim.js`. After changing the UI run `python3 tools/build_demo.py`; a test fails if the two are out of sync.
- 
+Releases: the version number lives in `VERSION` at the top of `server.py`. Bump it for every release and tag the same number on GitHub (for example `v0.4.0`).
+
+Layout: `server.py` (HTTP server, `ScanManager`, nmap runner, parser, validation, platform helpers, languages for the terminal), `index.html` (single-file UI), `locales/*.json` (all texts), `install.py` (+ `install.sh`, `install.bat`), `assets/`, `docs/` (browser-only demo), `tools/build_demo.py`, `tests/`, `Dockerfile`.
+
+The demo `docs/index.html` is **generated** from `index.html`, `locales/` and `docs/demo-shim.js`. After changing any of them run `python3 tools/build_demo.py`; a test fails if they are out of sync.
+
 ## Roadmap
-Optional vulners API key setting (adds the "actively exploited" flag), offline lookup, NSE script picker, IPv6 targets.
- 
+Right-to-left languages, optional vulners API key setting (adds the "actively exploited" flag), NSE script picker, IPv6 targets, `pipx` package.
+
 ## License
 MIT - see [LICENSE](LICENSE).
