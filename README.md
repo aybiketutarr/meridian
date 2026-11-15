@@ -1,5 +1,4 @@
 # Meridian
-
 A live web UI on top of the **nmap** engine: scan profiles, radial topology map, host table, risk scoring, known vulnerabilities and exploits for the software it finds, a trusted-device list that flags unknown devices, scan history with diff and risk trend, watch mode with desktop notifications, and JSON / CSV / Markdown / HTML / Nmap-XML export. Pure Python standard library, **no pip dependencies**. Runs on **Linux, macOS and Windows**, in **English, Türkçe, Deutsch, Español and Français**.
 
 **[Live demo](https://aybiketutarr.github.io/meridian/)** - runs entirely in your browser with sample data (no scanning).  ·  **[Türkçe README](README.tr.md)**
