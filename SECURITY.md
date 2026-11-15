@@ -1,4 +1,3 @@
-[SECURITY.md](https://github.com/user-attachments/files/34874351/SECURITY.md)
 # Security policy
  
 Meridian is a local tool: it binds to `127.0.0.1` only and must never be exposed to a network.
