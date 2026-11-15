@@ -35,7 +35,7 @@ class Linux(Base):
         self.assertFalse(any("__pycache__" in str(p) for p in app.rglob("*")))
         desk, icon = self.P["menu"]; text = desk.read_text(encoding="utf-8")
         self.assertIn("Name=Meridian", text); self.assertIn("Comment[tr]=nmap üzerinde ağ tarayıcı arayüzü", text); self.assertIn("Comment[de]=", text)
-        self.assertIn(f'Exec="{self.P["launcher"]}"', text); self.assertIn(f"Icon={icon}", text); self.assertTrue(icon.is_file())
+        self.assertIn(f'Exec="{self.P["launcher"].as_posix()}"', text); self.assertIn(f"Icon={icon}", text); self.assertTrue(icon.is_file())
         self.assertEqual(icon.read_bytes(), (ROOT / "assets" / "meridian.svg").read_bytes())
 
     @unittest.skipIf(not POSIX, "POSIX launcher")
