@@ -9,7 +9,7 @@ from http import cookies as http_cookies
 import math
  
 PORT = 0  # chosen at start-up (free port)
-VERSION = "0.4.1"   # bump for every release and tag the same number on GitHub (v0.4.0)
+VERSION = "0.4.2"   # bump for every release and tag the same number on GitHub (v0.4.2)
 TOKEN = secrets.token_urlsafe(16)
 # Local access control. The page and every API call need a session cookie, and the only way to get one is the single-use launch key in the URL that
 # Meridian opens itself (and prints). Another program or another user on the same machine can reach 127.0.0.1, but without the key it can neither
@@ -716,7 +716,7 @@ def downloads_dir():
         for line in (home / ".config" / "user-dirs.dirs").read_text(encoding="utf-8", errors="ignore").splitlines():
             if line.startswith("XDG_DOWNLOAD_DIR="): d = Path(os.path.expandvars(line.split("=", 1)[1].strip().strip('"')))
     except OSError: pass
-    if d is None or home not in d.resolve().parents: d = home / "Downloads"
+    if d is None or home.resolve() not in d.resolve().parents: d = home / "Downloads"
     d.mkdir(parents=True, exist_ok=True)
     return d
  
