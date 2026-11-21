@@ -1,0 +1,88 @@
+name: release
+# Builds the one-click installers: Meridian-Setup-<version>.exe (Windows) and meridian_<version>_all.deb (Debian, Ubuntu, Kali, Mint).
+# Start it by pushing a tag such as v0.5.1 (it then also attaches both files to a GitHub release), or by hand from the Actions tab.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: python3 tools/build_deb.py
+      - name: Check the package and run the installed program
+        run: |
+          dpkg-deb -I dist/*.deb
+          dpkg-deb -x dist/*.deb /tmp/root
+          python3 /tmp/root/opt/meridian/server.py --version
+          sudo apt-get install -y ./dist/*.deb
+          meridian --version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: dist/*.deb
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build the program folder (PyInstaller, no console window)
+        shell: pwsh
+        run: |
+          pip install pyinstaller
+          pyinstaller --noconfirm --clean --windowed --name Meridian --icon assets/meridian.ico --add-data "index.html;." --add-data "locales;locales" --add-data "assets;assets" --hidden-import ai server.py
+      - name: Smoke test (the program starts, finds its files and answers on localhost)
+        shell: pwsh
+        run: |
+          $exe = "dist\Meridian\Meridian.exe"
+          $env:MERIDIAN_PORT = "8765"
+          $p = Start-Process -FilePath $exe -ArgumentList "--serve" -PassThru
+          Start-Sleep -Seconds 8
+          if ($p.HasExited) { throw "Meridian.exe exited right after the start" }
+          $r = try { Invoke-WebRequest -Uri "http://127.0.0.1:8765/" -UseBasicParsing } catch { $_.Exception.Response }
+          if ([int]$r.StatusCode -ne 403) { throw "unexpected answer from the server: $($r.StatusCode)" }
+          Stop-Process -Id $p.Id -Force
+          if (-not (Test-Path "dist\Meridian\_internal\index.html")) { throw "index.html is missing from the build" }
+      - name: Version check (best effort)
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          Start-Process -FilePath "dist\Meridian\Meridian.exe" -ArgumentList "--version" -RedirectStandardOutput version.txt -Wait
+          Get-Content version.txt
+      - name: Build the installer (Inno Setup)
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          $v = (Select-String -Path server.py -Pattern '^VERSION = "([^"]+)"').Matches[0].Groups[1].Value
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$v" installer\meridian.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/Meridian-Setup-*.exe
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [deb, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
