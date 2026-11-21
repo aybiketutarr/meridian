@@ -68,6 +68,26 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc    # bash kullanıyorsan
 source ~/.zshrc
 ```
  
+### Arch Linux
+ 
+Arch Linux'ta (Python 3.14, nmap 7.993, Firefox) denendi: kurulum çalışıyor ve `meridian --doctor` her şeyi OK gösteriyor. `.deb` paketi yalnızca Debian tabanlı sistemler içindir, bu yüzden Arch'ta terminal kurulumunu kullanın. **Normal kullanıcınızla** çalışın (root ile değil).
+ 
+```sh
+sudo pacman -S --needed python nmap git
+git clone https://github.com/aybiketutarr/meridian.git
+cd meridian
+python install.py                                   # 'meridian' komutunu ve menü girdisini kurar
+```
+ 
+Arch'ta `~/.local/bin` varsayılan olarak PATH'te değildir, bu yüzden `meridian` ilk başta "command not found" diyebilir. Yeni bir terminal açın ya da bir kez ekleyin:
+```sh
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc    # zsh kullanıyorsanız ~/.zshrc
+source ~/.bashrc
+```
+Kurulumu `meridian --doctor` ile denetleyin. `!!` işaretli iki satır hata değil, bilgi notudur: "Scan privileges: normal user" (tam LAN sonuçları için yukarıdaki tabloya bakın) ve "App window browser: none found" (Meridian bunun yerine varsayılan tarayıcınızı açar).
+ 
+Sonra `meridian` komutunu çalıştırın. Chromium ailesi bir tarayıcı (Chromium, Chrome, Brave, Edge) varsa uygulama penceresi olarak açılır; Firefox gibi başka bir tarayıcıda normal sekmede açılır. `sudo` ile çalıştırırsanız yazdırılan bağlantıyı tarayıcınızda kendiniz açın ([Sorun giderme](#sorun-giderme)).
+ 
 ### macOS
  
 ```sh
@@ -209,7 +229,7 @@ Risk puanları açık servislerden ve NSE çıktısından gelen sezgisel değerl
 * **Uygulama penceresi yok, normal bir tarayıcı sekmesi açıldı:** Chromium tabanlı tarayıcı bulunamadı. Chrome, Edge veya Brave kurun ya da sekmeyi kullanın.
 * **macOS: "Meridian.app" Finder'dan açılmıyor.** `meridian`'ı bir kez terminalde çalıştırıp mesajı okuyun; `meridian --doctor` eksiği gösterir.
 * **Terminalde `vaInitialize failed` veya başka Chromium mesajları** tarayıcının zararsız GPU uyarılarıdır.
-* **Pencere root olarak açıldı:** Meridian pencereyi `sudo`'yu çalıştıran kullanıcı olarak açar. Gerçek root olarak giriş yaptıysanız yazdırılan adresi normal bir tarayıcıda açın.
+* **`sudo` ile başlattım, pencere açılmadı:** Meridian pencereyi `sudo`'yu çalıştıran kullanıcı için yalnızca Chromium ailesi bir tarayıcıyla açabilir. Başka bir tarayıcıda (örneğin Firefox) ya da gerçek root olarak giriş yaptıysanız yazdırılan adresi tarayıcınızda kendiniz açın; bir kez çalışır.
 * **Bir port için zafiyet listelenmiyor.** Panel nedenini söyler: "Sürüm numarası tespit edilemedi" aranacak bir şey olmadığı, "Bu sürüm için bilinen zafiyet döndürülmedi" aramanın çalışıp bir şey bulmadığı demektir. Tarama "Zafiyet verisi döndürülmedi" diyorsa makinenin vulners.com'a ulaşabildiğini kontrol edin.
 * **Windows konsolunda bozuk harfler:** Meridian çıktısını UTF-8'e geçirir; konsol yazı tipinizde bir harf yoksa Windows Terminal kullanın.
 ## Geliştirme
