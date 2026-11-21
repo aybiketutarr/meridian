@@ -1,5 +1,5 @@
 """Windows, macOS and Linux behaviour. Most checks fake the platform (IS_WIN / IS_MAC), so they run on every OS."""
-import os, socket, subprocess, sys, tempfile, types, unittest
+import os, subprocess, sys, tempfile, types, unittest
 from pathlib import Path
 from unittest import mock
 

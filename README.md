@@ -1,21 +1,38 @@
 # Meridian
 [![tests](https://github.com/aybiketutarr/meridian/actions/workflows/tests.yml/badge.svg)](https://github.com/aybiketutarr/meridian/actions/workflows/tests.yml)
-A live web UI on top of the **nmap** engine: scan profiles, radial topology map, host table, risk scoring, known vulnerabilities and exploits for the software it finds, a trusted-device list that flags unknown devices, scan history with diff and risk trend, watch mode with desktop notifications, and JSON / CSV / Markdown / HTML / Nmap-XML export. Pure Python standard library, **no pip dependencies**. Runs on **Linux, macOS and Windows**, in **English, Türkçe, Deutsch, Español and Français**.
+A live web UI on top of the **nmap** engine: scan profiles, radial topology map, host table, risk scoring, known vulnerabilities and exploits for the software it finds, a trusted-device list that flags unknown devices, scan history with diff and risk trend, watch mode with desktop notifications, optional AI analysis, branded reports, and JSON / CSV / Markdown / HTML / PDF / Nmap-XML export. Pure Python standard library, **no pip dependencies**. Runs on **Linux, macOS and Windows**, in **English, Türkçe, Deutsch, Español and Français**.
 
 **[Live demo](https://aybiketutarr.github.io/meridian/)** - runs entirely in your browser with sample data (no scanning).  ·  **[Türkçe README](README.tr.md)**
 
 > **Use responsibly.** Scan only networks you own or have explicit permission to test.
 
-## What is new in 0.4.0
+## What is new in 0.5
 
-* **Languages:** English, Türkçe, Deutsch, Español, Français. Meridian always starts in **English**; switch the language any time in the header and it is remembered. For the terminal messages (`--help`, `--doctor`, installer) use `--lang tr` or `MERIDIAN_LANG=tr`. Adding a language means adding one file ([how](#adding-a-language)).
-* **Linux, macOS and Windows:** one installer (`install.py`), proper data folders per system, a Start Menu entry on Windows, a `Meridian.app` on macOS, nmap and browser auto-detection.
-* **Trusted devices:** mark the devices you know; every other device is flagged **UNKNOWN** on the map, in the table, in the findings and in watch alerts.
-* **Offline hints:** a small built-in list of famous vulnerable releases (vsftpd 2.3.4, Apache 2.4.49, Heartbleed, ...). Nothing leaves your machine.
-* **Risk trend** chart in History, optional **desktop notifications** for watch alerts, localized HTML / Markdown reports.
-* **`meridian --doctor`** checks Python, nmap, privileges, browser and folders and tells you how to fix what is missing.
+* **One-click installers:** `Meridian-Setup-<version>.exe` for Windows (no Python needed) and `meridian_<version>_all.deb` for Debian, Ubuntu, Kali and Mint (nmap is installed with it). The terminal installers stay ([Installation](#installation)).
+* **AI analysis (optional, off by default):** a plain-language summary and a "fix this first" list. Works with Ollama and LM Studio (local) or Claude and OpenAI (cloud). No IP, MAC or host name is ever sent ([details](#ai-analysis-optional)).
+* **Report branding:** add your company or team, client, author, confidentiality note, accent colour and logo; they appear in the HTML, PDF and Markdown reports, which now start with a summary and end with a footer.
+* **New look:** an editorial layout with a left rail, five themes (Black, White, Blue, Violet, Ember) and a security-themed backdrop for each. Fonts are local; nothing is loaded from the internet.
+* **App icon** on Windows and macOS, and a Windows taskbar identity of its own.
+
+Earlier versions (languages, trusted devices, offline hints, `meridian --doctor`, security hardening): see the [CHANGELOG](CHANGELOG.md).
 
 ## Installation
+
+### One-click install (Windows and Linux)
+
+Download the file for your system from the [Releases page](https://github.com/aybiketutarr/meridian/releases). No Python needed on Windows.
+
+| | File | How |
+|---|---|---|
+| Windows 10/11 | `Meridian-Setup-<version>.exe` | Double-click. Installs for your user (no administrator), adds a Start Menu entry and an optional desktop icon. Windows may show a blue **SmartScreen** page because the file is not signed yet: choose **More info**, then **Run anyway**. Uninstall in *Settings > Apps*. |
+| Debian, Ubuntu, Kali, Mint | `meridian_<version>_all.deb` | Double-click (the software centre opens) or `sudo apt install ./meridian_<version>_all.deb`. Remove with `sudo apt remove meridian`. nmap is installed with it. |
+| macOS | | Manual install only for now, see below. |
+
+Real scans need **nmap**. The Linux package installs it; on Windows the installer offers to open the download page. Your scans, devices and settings live in your own folder and survive updates. The terminal installers below stay available for everyone who prefers them.
+
+Maintainers: `python3 tools/build_deb.py` builds the package; pushing a tag such as `v0.5.1` makes GitHub build both files (`.github/workflows/release.yml`).
+
+### Manual install (terminal)
 
 Needs **Python 3.10 or newer** and, for real scans, **nmap**. No Python packages. Everything installs for your own user: no root, no administrator. Without nmap you can still try everything with **Sample data**.
 
@@ -93,7 +110,7 @@ Run it as your normal user, without sudo.
 ```sh
 python3 server.py            # or: python3 server.py --serve   (no window; prints the URL)
 ```
-Meridian uses port 8765 (so theme, presets and notes are remembered) and falls back to a free port if it is busy. Environment: `MERIDIAN_PORT`, `MERIDIAN_LANG`, `MERIDIAN_NMAP` (path to nmap), `MERIDIAN_DATA_DIR` (where saved data lives).
+Meridian uses port 8765 (so theme, presets and notes are remembered) and falls back to a free port if it is busy. Environment: `MERIDIAN_PORT`, `MERIDIAN_LANG`, `MERIDIAN_NMAP` (path to nmap), `MERIDIAN_DATA_DIR` (where saved data lives), `MERIDIAN_AI_KEY` (API key for a cloud AI provider).
 
 ### Docker (optional, Linux)
 
@@ -129,8 +146,10 @@ Copy `locales/en.json` to `locales/<code>.json` (for example `pt.json`), transla
 * Radial topology map, sortable and filterable host table, per-host notes, saved Custom presets
 * Scan history (stored locally) with a diff between two scans and a **risk trend** for repeated scans of the same target
 * Watch mode: re-scan a target every 5 min to 6 h and get alerts for new hosts, unknown devices, new ports and vanished hosts, optionally as **desktop notifications** (works while Meridian is open)
+* **AI analysis (optional):** summary and prioritised fixes from a local or cloud model, with no IPs or host names sent ([details](#ai-analysis-optional))
 * Export: JSON, CSV, Markdown, HTML, PDF (print), raw Nmap XML, copy IP list. Files are saved straight into your Downloads folder (a message shows the exact path)
-* 5 themes, including *Waves* (animated background, static if reduced motion is on)
+* **Report branding:** company, client, author, confidentiality note, accent colour and logo in the HTML, PDF and Markdown reports (stored only in your browser)
+* 5 themes (Black, White, Blue, Violet, Ember); the theme follows your system until you pick one
 
 ### Accepted targets
 IPv4 address, CIDR (up to `/22`), last-octet range (`192.168.1.10-50`) or hostname. Separate several with spaces or commas (max 32 targets, 1024 addresses in total). IPv6 is not supported yet.
@@ -168,6 +187,18 @@ Meridian shows the result under each port in the host panel (worst first), adds 
 * Without an API key the data has no CISA "actively exploited" flag; public-exploit flags and CVSS are included. Meridian never spends API credits.
 * Meridian only **reports** that exploits exist. It does not run or download exploit code.
 
+## AI analysis (optional)
+
+Open the **AI** tab and choose a provider; until then nothing is used and nothing is sent.
+
+| Provider | Where it runs | Needs |
+|---|---|---|
+| Ollama | your computer (`127.0.0.1:11434`) | Ollama running with a model pulled |
+| LM Studio | your computer (`127.0.0.1:1234`) | LM Studio's local server on |
+| Claude, OpenAI | their cloud | an API key (paste it in the tab, or set `MERIDIAN_AI_KEY`) |
+
+Meridian builds the data itself from the scan result and removes every IP address, MAC address, host name, vendor and banner; only OS, ports, services, versions and CVE ids remain, under labels like H1, H2. A cloud request first shows you the exact data and needs a single-use confirmation. The answer is checked, shown as plain text and marked as generated in the HTML and Markdown reports: verify it before acting. More in [SECURITY.md](SECURITY.md).
+
 ## Security model
 Localhost-only binding, per-run token (constant-time compare), Host and Origin checks, strict CSP, whitelisted scan options, strict target validation, one scan at a time (a single `ScanManager`), 1-hour scan limit, public-target confirmation, authorization checkbox before every scan, and a local audit log in the data folder (rotated at 1 MB; history, devices and the audit log are private files). Scratch files live in a private directory with a random name, and every nmap runs in its own process group (Windows: process tree) that is stopped and reaped on stop, time limit, exit and crash recovery. On Windows the port is bound exclusively, so no other program can share it. See [SECURITY.md](SECURITY.md).
 
@@ -196,9 +227,9 @@ Before every push run `python3 tools/preflight.py`: it checks the files, line en
 
 CI runs the same command on **Ubuntu, macOS and Windows** with Python 3.10 - 3.13 (`.github/workflows/tests.yml`). Most platform logic is tested by faking the platform, so the tests also run everywhere; Windows- and macOS-only system calls (registry, PowerShell shortcut, `ps`) are covered with fakes and need a real machine for a final check.
 
-Releases: the version number lives in `VERSION` at the top of `server.py`. Bump it for every release and tag the same number on GitHub (for example `v0.4.0`).
+Releases: the version number lives in `VERSION` at the top of `server.py`. Bump it for every release and tag the same number on GitHub (for example `v0.5.1`).
 
-Layout: `server.py` (HTTP server, `ScanManager`, nmap runner, parser, validation, platform helpers, languages for the terminal), `index.html` (single-file UI), `locales/*.json` (all texts), `install.py` (+ `install.sh`, `install.bat`), `assets/`, `docs/` (browser-only demo), `tools/build_demo.py`, `tests/`, `Dockerfile`.
+Layout: `server.py` (HTTP server, `ScanManager`, nmap runner, parser, validation, platform helpers, languages for the terminal), `ai.py` (optional AI analysis), `index.html` (single-file UI), `locales/*.json` (all texts), `install.py` (+ `install.sh`, `install.bat`), `installer/meridian.iss` (Windows setup), `assets/` (icons), `docs/` (browser-only demo), `tools/` (`build_demo.py`, `build_deb.py`, `make_icons.py`, `preflight.py`), `.github/workflows/` (tests and release), `tests/`, `Dockerfile`.
 
 The demo `docs/index.html` is **generated** from `index.html`, `locales/` and `docs/demo-shim.js`. After changing any of them run `python3 tools/build_demo.py`; a test fails if they are out of sync.
 

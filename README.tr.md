@@ -1,21 +1,38 @@
 # Meridian
 
-**nmap** motorunun üzerinde çalışan canlı bir web arayüzü: tarama profilleri, radyal topoloji haritası, cihaz tablosu, risk puanı, bulunan yazılımlar için bilinen zafiyetler ve exploit'ler, tanımadığınız cihazları işaretleyen güvenilir cihaz listesi, farkları ve risk eğilimini gösteren tarama geçmişi, masaüstü bildirimli izleme modu ve JSON / CSV / Markdown / HTML / Nmap-XML dışa aktarma. Yalnızca Python standart kütüphanesi, **pip bağımlılığı yok**. **Linux, macOS ve Windows**'ta, **English, Türkçe, Deutsch, Español ve Français** dilleriyle çalışır.
+**nmap** motorunun üzerinde çalışan canlı bir web arayüzü: tarama profilleri, radyal topoloji haritası, cihaz tablosu, risk puanı, bulunan yazılımlar için bilinen zafiyetler ve exploit'ler, tanımadığınız cihazları işaretleyen güvenilir cihaz listesi, farkları ve risk eğilimini gösteren tarama geçmişi, masaüstü bildirimli izleme modu, isteğe bağlı yapay zekâ analizi, markalı raporlar ve JSON / CSV / Markdown / HTML / PDF / Nmap-XML dışa aktarma. Yalnızca Python standart kütüphanesi, **pip bağımlılığı yok**. **Linux, macOS ve Windows**'ta, **English, Türkçe, Deutsch, Español ve Français** dilleriyle çalışır.
 
 **[Canlı demo](https://aybiketutarr.github.io/meridian/)**: tamamen tarayıcınızda, örnek verilerle çalışır (tarama yapmaz).  ·  **[English README](README.md)**
 
 > **Sorumlu kullanın.** Yalnızca sahibi olduğunuz veya test etmek için açık izniniz bulunan ağları tarayın.
 
-## 0.4.0'da neler yeni
+## 0.5'te neler yeni
 
-* **Diller:** English, Türkçe, Deutsch, Español, Français. Meridian her zaman **İngilizce** başlar; dili üst çubuktan istediğiniz an değiştirebilirsiniz, seçiminiz hatırlanır. Terminal mesajları (`--help`, `--doctor`, kurucu) için `--lang tr` veya `MERIDIAN_LANG=tr` kullanın. Yeni dil eklemek tek bir dosya eklemektir ([nasıl](#yeni-dil-ekleme)).
-* **Linux, macOS ve Windows:** tek kurucu (`install.py`), her sistem için doğru veri klasörü, Windows'ta Başlat menüsü girdisi, macOS'ta `Meridian.app`, nmap ve tarayıcı otomatik bulma.
-* **Güvenilir cihazlar:** tanıdığınız cihazları işaretleyin; geri kalan her cihaz haritada, tabloda, bulgularda ve izleme uyarılarında **BİLİNMİYOR** olarak işaretlenir.
-* **Çevrimdışı ipuçları:** ünlü savunmasız sürümlerin (vsftpd 2.3.4, Apache 2.4.49, Heartbleed, ...) küçük dahili listesi. Makinenizden hiçbir şey çıkmaz.
-* Geçmişte **risk eğilimi** grafiği, izleme uyarıları için isteğe bağlı **masaüstü bildirimleri**, seçtiğiniz dilde HTML / Markdown raporları.
-* **`meridian --doctor`**: Python, nmap, yetkiler, tarayıcı ve klasörleri denetler, eksikleri nasıl gidereceğinizi söyler.
+* **Tek tıkla kurulum:** Windows için `Meridian-Setup-<sürüm>.exe` (Python gerekmez), Debian, Ubuntu, Kali ve Mint için `meridian_<sürüm>_all.deb` (nmap birlikte kurulur). Terminal kurucuları duruyor ([Kurulum](#kurulum)).
+* **Yapay zekâ analizi (isteğe bağlı, varsayılan olarak kapalı):** sade dille özet ve "önce bunu düzeltin" listesi. Ollama ve LM Studio (yerel) ya da Claude ve OpenAI (bulut) ile çalışır. IP, MAC veya cihaz adı asla gönderilmez ([ayrıntılar](#yapay-zekâ-analizi-isteğe-bağlı)).
+* **Rapor markalama:** şirket veya ekip, müşteri, hazırlayan, gizlilik notu, vurgu rengi ve logo; HTML, PDF ve Markdown raporlarında görünür. Raporlar artık bir özetle başlar ve alt bilgiyle biter.
+* **Yeni görünüm:** sol şeritli editoryal bir yerleşim, beş tema (Siyah, Beyaz, Mavi, Mor, Kor) ve her tema için güvenlik temalı bir arka plan. Yazı tipleri yereldir; internetten hiçbir şey yüklenmez.
+* Windows ve macOS'ta **uygulama simgesi**, Windows'ta kendi görev çubuğu kimliği.
+
+Önceki sürümler (diller, güvenilir cihazlar, çevrimdışı ipuçları, `meridian --doctor`, güvenlik sertleştirmeleri): [CHANGELOG](CHANGELOG.md).
 
 ## Kurulum
+
+### Tek tıkla kurulum (Windows ve Linux)
+
+Sisteminize uygun dosyayı [Releases sayfasından](https://github.com/aybiketutarr/meridian/releases) indirin. Windows'ta Python gerekmez.
+
+| | Dosya | Nasıl |
+|---|---|---|
+| Windows 10/11 | `Meridian-Setup-<sürüm>.exe` | Çift tıklayın. Yönetici izni gerekmeden kullanıcınıza kurulur, Başlat Menüsü girişi ve isteğe bağlı masaüstü simgesi ekler. Dosya henüz imzalı olmadığı için Windows mavi bir **SmartScreen** sayfası gösterebilir: **Ek bilgi**, sonra **Yine de çalıştır** deyin. *Ayarlar > Uygulamalar* üzerinden kaldırılır. |
+| Debian, Ubuntu, Kali, Mint | `meridian_<sürüm>_all.deb` | Çift tıklayın (yazılım merkezi açılır) ya da `sudo apt install ./meridian_<sürüm>_all.deb`. Kaldırmak için `sudo apt remove meridian`. nmap birlikte kurulur. |
+| macOS | | Şimdilik yalnızca elle kurulum, aşağıya bakın. |
+
+Gerçek taramalar için **nmap** gerekir. Linux paketi onu kurar; Windows kurulumu indirme sayfasını açmayı önerir. Taramalarınız, cihazlarınız ve ayarlarınız kendi klasörünüzde durur ve güncellemelerde korunur. Terminalle kurmayı sevenler için aşağıdaki kurulumlar da duruyor.
+
+Geliştiriciler için: `python3 tools/build_deb.py` paketi üretir; `v0.5.1` gibi bir etiket gönderince GitHub iki dosyayı da kendisi derler (`.github/workflows/release.yml`).
+
+### Elle kurulum (terminal)
 
 **Python 3.10 veya yenisi** ve gerçek taramalar için **nmap** gerekir. Python paketi gerekmez. Her şey yalnızca kendi kullanıcınız için kurulur: root veya yönetici hakkı gerekmez. nmap olmadan da **Örnek veri** ile her şeyi deneyebilirsiniz.
 
@@ -93,7 +110,7 @@ Normal kullanıcınızla, sudo olmadan çalıştırın.
 ```sh
 python3 server.py            # veya: python3 server.py --serve   (pencere yok; adresi yazar)
 ```
-Meridian 8765 portunu kullanır (tema, ön ayar ve notlar hatırlansın diye); doluysa boş bir porta geçer. Ortam değişkenleri: `MERIDIAN_PORT`, `MERIDIAN_LANG`, `MERIDIAN_NMAP` (nmap yolu), `MERIDIAN_DATA_DIR` (kayıtlı verilerin yeri).
+Meridian 8765 portunu kullanır (tema, ön ayar ve notlar hatırlansın diye); doluysa boş bir porta geçer. Ortam değişkenleri: `MERIDIAN_PORT`, `MERIDIAN_LANG`, `MERIDIAN_NMAP` (nmap yolu), `MERIDIAN_DATA_DIR` (kayıtlı verilerin yeri), `MERIDIAN_AI_KEY` (bulut yapay zekâ sağlayıcısı için API anahtarı).
 
 ### Docker (isteğe bağlı, Linux)
 
@@ -129,8 +146,10 @@ Meridian İngilizce başlar. Başka bir dil yalnızca üst çubuktan seçerseniz
 * Radyal topoloji haritası, sıralanabilir ve süzülebilir cihaz tablosu, cihaza özel notlar, kayıtlı Özel ön ayarlar
 * Yerelde saklanan tarama geçmişi; iki tarama arasındaki fark ve aynı hedefin tekrarlanan taramaları için **risk eğilimi**
 * İzleme modu: hedefi 5 dakikadan 6 saate kadar aralıklarla yeniden tarar; yeni cihaz, bilinmeyen cihaz, yeni port ve kaybolan cihaz için uyarır, isteğe bağlı **masaüstü bildirimi** olarak (Meridian açıkken çalışır)
+* **Yapay zekâ analizi (isteğe bağlı):** yerel veya bulut bir modelden özet ve öncelikli düzeltmeler; IP veya cihaz adı gönderilmez ([ayrıntılar](#yapay-zekâ-analizi-isteğe-bağlı))
 * Dışa aktarma: JSON, CSV, Markdown, HTML, PDF (yazdır), ham Nmap XML, IP listesini kopyala. Dosyalar doğrudan İndirilenler klasörünüze kaydedilir (tam yol mesajla gösterilir)
-* *Waves* dahil 5 tema (animasyonlu arka plan; "hareketi azalt" açıksa durağan)
+* **Rapor markalama:** şirket, müşteri, hazırlayan, gizlilik notu, vurgu rengi ve logo HTML, PDF ve Markdown raporlarında (yalnızca tarayıcınızda saklanır)
+* 5 tema (Siyah, Beyaz, Mavi, Mor, Kor); siz seçene kadar tema sistemi izler
 
 ### Kabul edilen hedefler
 IPv4 adresi, CIDR (en fazla `/22`), son sekiz bit aralığı (`192.168.1.10-50`) veya ana makine adı. Birden çoğunu boşluk veya virgülle ayırın (en fazla 32 hedef, toplam 1024 adres). IPv6 henüz desteklenmiyor.
@@ -168,6 +187,18 @@ Meridian sonucu cihaz panelinde her portun altında gösterir (en kötüsü önc
 * API anahtarı olmadan veride CISA "aktif sömürülüyor" işareti yoktur; herkese açık exploit işaretleri ve CVSS vardır. Meridian API kredisi harcamaz.
 * Meridian exploit'lerin var olduğunu yalnızca **bildirir**. Exploit kodu çalıştırmaz veya indirmez.
 
+## Yapay zekâ analizi (isteğe bağlı)
+
+**AI** sekmesini açıp bir sağlayıcı seçin; o zamana kadar hiçbir şey kullanılmaz ve hiçbir şey gönderilmez.
+
+| Sağlayıcı | Nerede çalışır | Ne gerekir |
+|---|---|---|
+| Ollama | bilgisayarınızda (`127.0.0.1:11434`) | Ollama çalışıyor ve bir model indirilmiş olmalı |
+| LM Studio | bilgisayarınızda (`127.0.0.1:1234`) | LM Studio'nun yerel sunucusu açık olmalı |
+| Claude, OpenAI | onların bulutunda | API anahtarı (sekmeye yapıştırın ya da `MERIDIAN_AI_KEY` tanımlayın) |
+
+Meridian veriyi tarama sonucundan kendisi hazırlar ve her IP adresini, MAC adresini, cihaz adını, üreticiyi ve banner'ı çıkarır; yalnızca işletim sistemi, portlar, servisler, sürümler ve CVE numaraları H1, H2 gibi etiketlerle kalır. Bulut isteği önce tam olarak neyin gideceğini gösterir ve tek kullanımlık onay ister. Yanıt denetlenir, düz metin olarak gösterilir ve HTML ile Markdown raporlarında "üretilmiştir" diye işaretlenir: uygulamadan önce doğrulayın. Ayrıntılar [SECURITY.md](SECURITY.md) içinde.
+
 ## Güvenlik modeli
 Yalnızca localhost'a bağlanma, çalıştırma başına belirteç (sabit zamanlı karşılaştırma), Host ve Origin denetimleri, sıkı CSP, beyaz listeli tarama seçenekleri, sıkı hedef doğrulaması, aynı anda tek tarama (tek bir `ScanManager`), 1 saatlik tarama sınırı, herkese açık hedef onayı, her taramadan önce yetki onay kutusu ve veri klasöründe yerel denetim günlüğü (1 MB'ta döner; geçmiş, cihazlar ve denetim günlüğü özel dosyalardır). Geçici dosyalar rastgele adlı özel bir klasörde durur ve her nmap kendi süreç grubunda (Windows'ta süreç ağacı) çalışır; durdurma, zaman sınırı, çıkış ve çökme kurtarmasında durdurulur ve toplanır. Windows'ta port özel olarak bağlanır, başka hiçbir program paylaşamaz. Bkz. [SECURITY.md](SECURITY.md).
 
@@ -196,9 +227,9 @@ Her push'tan önce `python3 tools/preflight.py` çalıştırın: dosyaları, sat
 
 CI aynı komutu **Ubuntu, macOS ve Windows**'ta Python 3.10 - 3.13 ile çalıştırır (`.github/workflows/tests.yml`). Platform mantığının çoğu platform taklit edilerek test edilir, bu yüzden testler her yerde çalışır; yalnızca Windows ve macOS'a özgü sistem çağrıları (kayıt defteri, PowerShell kısayolu, `ps`) taklitlerle kapsanır ve son kontrol için gerçek makine ister.
 
-Sürümler: sürüm numarası `server.py` başındaki `VERSION` içindedir. Her sürümde artırın ve aynı numarayı GitHub'da etiketleyin (örneğin `v0.4.0`).
+Sürümler: sürüm numarası `server.py` başındaki `VERSION` içindedir. Her sürümde artırın ve aynı numarayı GitHub'da etiketleyin (örneğin `v0.5.1`).
 
-Yapı: `server.py` (HTTP sunucusu, `ScanManager`, nmap çalıştırıcı, ayrıştırıcı, doğrulama, platform yardımcıları, terminal dilleri), `index.html` (tek dosya arayüz), `locales/*.json` (tüm metinler), `install.py` (+ `install.sh`, `install.bat`), `assets/`, `docs/` (yalnızca tarayıcıda çalışan demo), `tools/build_demo.py`, `tests/`, `Dockerfile`.
+Yapı: `server.py` (HTTP sunucusu, `ScanManager`, nmap çalıştırıcı, ayrıştırıcı, doğrulama, platform yardımcıları, terminal dilleri), `ai.py` (isteğe bağlı yapay zekâ analizi), `index.html` (tek dosya arayüz), `locales/*.json` (tüm metinler), `install.py` (+ `install.sh`, `install.bat`), `installer/meridian.iss` (Windows kurulumu), `assets/` (simgeler), `docs/` (yalnızca tarayıcıda çalışan demo), `tools/` (`build_demo.py`, `build_deb.py`, `make_icons.py`, `preflight.py`), `.github/workflows/` (test ve sürüm), `tests/`, `Dockerfile`.
 
 `docs/index.html` demosu `index.html`, `locales/` ve `docs/demo-shim.js` dosyalarından **üretilir**. Bunlardan birini değiştirince `python3 tools/build_demo.py` çalıştırın; eşitlik bozulursa bir test başarısız olur.
 

@@ -13,7 +13,7 @@ def check(ok, text):
     print(("ok    " if ok else "FAIL  ") + text)
     if not ok: problems.append(text)
 
-for p in ("server.py", "index.html", "install.py", "locales/en.json", "tests", "docs/index.html", "tools/build_demo.py", ".github/workflows/tests.yml", ".gitattributes", "CHANGELOG.md"):
+for p in ("server.py", "index.html", "install.py", "locales/en.json", "tests", "docs/index.html", "tools/build_demo.py", "tools/build_deb.py", "installer/meridian.iss", ".github/workflows/release.yml", ".github/workflows/tests.yml", ".gitattributes", "CHANGELOG.md"):
     check((ROOT / p).exists(), f"{p} is in the repository root (not inside a sub-folder)")
 for p in ("install.sh", "server.py", "install.py"):
     f = ROOT / p
