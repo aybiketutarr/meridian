@@ -68,6 +68,26 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc    # bash users: ~/.bash
 source ~/.zshrc
 ```
  
+### Arch Linux
+ 
+Tried on Arch Linux (Python 3.14, nmap 7.993, Firefox): the install works and `meridian --doctor` reports everything OK. The `.deb` package is for Debian-based systems only, so on Arch use the terminal install. Use your **normal user** (not root).
+ 
+```sh
+sudo pacman -S --needed python nmap git
+git clone https://github.com/aybiketutarr/meridian.git
+cd meridian
+python install.py                                   # installs the 'meridian' command and a menu entry
+```
+ 
+`~/.local/bin` is not in the PATH on Arch by default, so `meridian` may be "command not found" at first. Open a new terminal or add it once:
+```sh
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc    # zsh users: ~/.zshrc
+source ~/.bashrc
+```
+Check the setup with `meridian --doctor`. Two lines marked `!!` are notices, not errors: "Scan privileges: normal user" (see the table above for full LAN results) and "App window browser: none found" (Meridian opens your default browser instead).
+ 
+Then run `meridian`. With a Chromium-family browser (Chromium, Chrome, Brave, Edge) it opens as an app window; with any other browser, such as Firefox, it opens in a normal tab. If you run it with `sudo`, open the printed link in your browser yourself (see [Troubleshooting](#troubleshooting)).
+ 
 ### macOS
  
 ```sh
@@ -209,7 +229,7 @@ Start with `meridian --doctor`.
 * **No app window, a normal browser tab opens:** no Chromium-family browser was found. Install Chrome, Edge or Brave, or just use the tab.
 * **macOS: "Meridian.app" does not open from Finder.** Start `meridian` once in a terminal and read the message; `meridian --doctor` shows what is missing.
 * **`vaInitialize failed` or other Chromium messages in the terminal** are harmless GPU warnings from the browser.
-* **Window opened as root:** Meridian opens the window as the user who ran `sudo`. If you log in as a real root user, open the printed URL in a normal browser.
+* **Started with `sudo`, no window opens:** Meridian can open the window for the user who ran `sudo` only with a Chromium-family browser. With any other browser (for example Firefox), or if you log in as a real root user, open the printed URL in your browser yourself; it works once.
 * **No vulnerabilities are listed for a port.** The panel says why: "No version number detected" means nothing to look up; "No known vulnerabilities returned" means the lookup ran and found nothing. If a scan shows "No vulnerability data returned", check that the machine can reach vulners.com.
 * **Garbled letters in a Windows console:** Meridian switches its output to UTF-8; if your console font lacks a letter, use Windows Terminal.
 ## Development
