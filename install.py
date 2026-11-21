@@ -58,17 +58,23 @@ def make_mac_app(bundle, py, app):
         '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
         '<plist version="1.0"><dict>\n<key>CFBundleName</key><string>Meridian</string>\n<key>CFBundleDisplayName</key><string>Meridian</string>\n'
         '<key>CFBundleIdentifier</key><string>app.meridian.scanner</string>\n<key>CFBundleExecutable</key><string>Meridian</string>\n'
+        '<key>CFBundleIconFile</key><string>Meridian</string>\n<key>NSHighResolutionCapable</key><true/>\n'
         f'<key>CFBundlePackageType</key><string>APPL</string>\n<key>CFBundleShortVersionString</key><string>{server.VERSION}</string>\n</dict></plist>\n', encoding="utf-8")
+    icns = Path(app) / "assets" / "meridian.icns"                       # the emblem: Launchpad, Dock and Finder show it instead of a generic icon
+    if icns.is_file(): (bundle / "Contents" / "Resources").mkdir(); shutil.copy2(icns, bundle / "Contents" / "Resources" / "Meridian.icns")
+    bundle.touch()                                                       # nudges Finder to refresh a cached icon on reinstall
     exe = macos / "Meridian"; exe.write_text(sh_launcher(py, app), encoding="utf-8"); exe.chmod(0o755)
 
 def make_win_shortcut(lnk, py, app):
-    """Start Menu shortcut through PowerShell (no extra packages). pythonw.exe: no console window."""
+    """Start Menu shortcut through PowerShell (no extra packages). pythonw.exe: no console window; the Meridian emblem replaces the Python icon."""
     pyw = Path(py).with_name("pythonw.exe"); target = pyw if pyw.exists() else Path(py)
     q = lambda x: str(x).replace("'", "''")
     lnk.parent.mkdir(parents=True, exist_ok=True)
     ps = (f"$s=(New-Object -ComObject WScript.Shell).CreateShortcut('{q(lnk)}');$s.TargetPath='{q(target)}';"
-          f"$s.Arguments='\"{q(Path(app) / 'server.py')}\"';$s.WorkingDirectory='{q(app)}';$s.Description='Meridian';$s.Save()")
+          f"$s.Arguments='\"{q(Path(app) / 'server.py')}\"';$s.WorkingDirectory='{q(app)}';$s.Description='Meridian';$s.IconLocation='{q(Path(app) / 'assets' / 'meridian.ico')},0';$s.Save()")
     subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps], check=True, capture_output=True, timeout=60)
+    try: import ctypes; ctypes.windll.shell32.SHChangeNotify(0x08000000, 0, None, None)      # SHCNE_ASSOCCHANGED: refresh Explorer's icon cache
+    except (AttributeError, OSError, ImportError): pass
 
 def install(src=HERE, python=None, add_path=True):
     P = server.install_paths(); py = Path(python or sys.executable); app = P["app"]

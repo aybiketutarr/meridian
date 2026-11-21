@@ -74,7 +74,7 @@ class Linux(Base):
 
     def test_missing_file_is_reported_not_crashed(self):
         with tempfile.TemporaryDirectory() as partial:
-            (Path(partial) / "server.py").write_text("x", encoding="utf-8")
+            (Path(partial) / "server.py").write_text("x", encoding="utf-8"); (Path(partial) / "ai.py").write_text("x", encoding="utf-8")
             with self.assertRaises(FileNotFoundError) as e: install.install(partial)
         self.assertEqual(e.exception.args[0], "index.html")
         self.assertFalse(self.P["app"].exists())                  # nothing half-installed
@@ -101,6 +101,7 @@ class MacOS(Base):
         if POSIX: self.assertTrue(os.access(exe, os.X_OK))
         body = exe.read_text(encoding="utf-8"); self.assertIn("/usr/bin/python3", body); self.assertIn("Application Support/Meridian-app/server.py", body.replace("'", ""))   # quoted: the folder name has a space
         self.assertTrue(self.P["launcher"].is_file())
+        self.assertEqual(plist["CFBundleIconFile"], "Meridian"); self.assertTrue((bundle / "Contents" / "Resources" / "Meridian.icns").is_file())
 
     @unittest.skipIf(not POSIX, "POSIX launcher")
     def test_the_command_works_from_a_folder_with_a_space_in_its_name(self):
@@ -142,7 +143,7 @@ class Windows(Base):
         calls = []
         with mock.patch.object(install.subprocess, "run", side_effect=lambda cmd, **k: calls.append(cmd)):
             install.make_win_shortcut(self.home / "O'Brien" / "Meridian.lnk", Path(self.home / "py" / "python.exe"), self.home / "L" / "Meridian-app")
-        ps = calls[0][-1]; self.assertEqual(calls[0][0], "powershell"); self.assertIn("O''Brien", ps); self.assertIn("server.py", ps); self.assertIn("CreateShortcut", ps)
+        ps = calls[0][-1]; self.assertEqual(calls[0][0], "powershell"); self.assertIn("O''Brien", ps); self.assertIn("server.py", ps); self.assertIn("CreateShortcut", ps); self.assertIn("IconLocation", ps); self.assertIn("meridian.ico", ps)
 
     def test_uninstall_cleans_the_path(self):
         with mock.patch.object(server, "win_user_path"), mock.patch.object(install, "make_win_shortcut"): install.install(ROOT, python="python.exe")
@@ -174,6 +175,12 @@ class Shipped(unittest.TestCase):
         import ast
         for f in ("server.py", "install.py", "tools/build_demo.py"):
             ast.parse((ROOT / f).read_text(encoding="utf-8"), feature_version=(3, 10))
+
+    def test_icons_for_windows_and_macos_are_real(self):
+        ico, icns = (ROOT / "assets" / "meridian.ico").read_bytes(), (ROOT / "assets" / "meridian.icns").read_bytes()
+        self.assertEqual(ico[:4], b"\x00\x00\x01\x00"); self.assertGreaterEqual(int.from_bytes(ico[4:6], "little"), 6)      # ICO header, several sizes
+        self.assertEqual(icns[:4], b"icns"); self.assertEqual(int.from_bytes(icns[4:8], "big"), len(icns))
+        self.assertEqual((ROOT / "assets" / "meridian.png").read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
 
     def test_the_icon_is_valid_svg(self):
         import xml.etree.ElementTree as ET

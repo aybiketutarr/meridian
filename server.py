@@ -7,9 +7,10 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 from http import cookies as http_cookies
 import math
+import ai
  
 PORT = 0  # chosen at start-up (free port)
-VERSION = "0.4.4"   # bump for every release and tag the same number on GitHub (v0.4.4)
+VERSION = "0.5.1"   # bump for every release and tag the same number on GitHub (v0.5.1)
 TOKEN = secrets.token_urlsafe(16)
 # Local access control. The page and every API call need a session cookie, and the only way to get one is the single-use launch key in the URL that
 # Meridian opens itself (and prints). Another program or another user on the same machine can reach 127.0.0.1, but without the key it can neither
@@ -38,7 +39,7 @@ JOBS = {}
 IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
 ROOT = Path(__file__).resolve().parent         # server.py, index.html, locales/ and assets/ live here (also in the installed copy)
-APP_FILES, APP_DIRS = ("server.py", "index.html"), ("locales", "assets")      # what install.py copies and the Dockerfile ships
+APP_FILES, APP_DIRS = ("server.py", "ai.py", "index.html"), ("locales", "assets")      # what install.py copies and the Dockerfile ships
 UI_LANG = ""                                   # language forced with --lang / MERIDIAN_LANG; empty = the browser decides
 LANG = "en"                                    # language of messages printed in the terminal
 def current_os(): return "windows" if IS_WIN else "macos" if IS_MAC else "linux"
@@ -169,7 +170,7 @@ ERR_CODES = {"Timing must be 0-5": "timing", "Invalid port list": "ports", "Inva
              "At most 5 watches": "watch_max", "A scan is already running. Stop it first.": "busy", "Export is empty or too large": "export_size",
              "Unsupported file type": "export_type", "nmap not found. Install it or use demo mode.": "nmap_missing", "nmap not found": "nmap_missing",
              "Could not create the private scratch directory": "scratch", "Stopped: 1 hour limit reached": "time_limit",
-             "Invalid device": "device", "Too many devices": "devices_max", "Invalid request": "request"}
+             "Invalid device": "device", "Too many devices": "devices_max", "Invalid request": "request", "Invalid AI settings": "ai_settings"}
 
 def err(msg): return {"error": msg, "code": ERR_CODES.get(msg, "")}
 
@@ -765,6 +766,112 @@ def audit(msg):
         _chown_sudo(p)
     except OSError: pass
  
+
+# ---- optional AI analysis (off by default; see ai.py). The page never talks to an AI: this server does, with data it builds itself. ----
+AI_RESULTS, CONSENTS, CONSENT_TTL = {}, {}, 300
+AI_ERR_STATUS = {"ai_busy": 409, "ai_http": 502, "ai_unreachable": 502, "ai_badjson": 502}
+
+def ai_config():
+    try: d = json.loads((data_dir() / "ai.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError): d = {}
+    if not isinstance(d, dict): d = {}
+    pv = d.get("provider") if d.get("provider") in ai.PROVIDERS else ""
+    model = d.get("model") if isinstance(d.get("model"), str) and ai.MODEL_RE.match(d["model"]) else ""
+    port = d.get("port") if isinstance(d.get("port"), int) and 1024 <= d["port"] <= 65535 else None
+    return {"provider": pv, "model": model, "port": port or ai.LOCAL.get(pv, 11434)}
+
+def ai_key():
+    k = os.environ.get("MERIDIAN_AI_KEY", "").strip()
+    if k: return k, "env"
+    try: return (data_dir() / "ai.key").read_text(encoding="utf-8").strip(), "file"
+    except OSError: return "", ""
+
+def ai_write_key(k):
+    p = data_dir() / "ai.key"
+    if not k:
+        try: p.unlink()
+        except OSError: pass
+        return
+    fd, tmp = tempfile.mkstemp(dir=p.parent, prefix=".tmp-", suffix=".key")      # private (0600) from the start
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f: f.write(k)
+        os.replace(tmp, p)
+    except BaseException:
+        try: os.unlink(tmp)
+        except OSError: pass
+        raise
+    _chown_sudo(p)
+
+def ai_status():
+    c = ai_config(); k, src = ai_key()
+    return {"provider": c["provider"], "model": c["model"], "port": c["port"], "default_model": ai.DEFAULT_MODEL.get(c["provider"], ""), "cloud": ai.is_cloud(c["provider"]),
+            "key": bool(k), "key_src": src, "providers": list(ai.PROVIDERS), "models": ai.list_local_models(c["provider"], c["port"]) if c["provider"] in ai.LOCAL else []}
+
+def ai_set_config(d):
+    """POST /api/ai/config. {"provider": ""|one of ai.PROVIDERS, "model"?, "port"?, "key"? (stored in a private file, never sent back), "clear_key"?: true}"""
+    c = ai_config()
+    if "provider" in d:
+        if d["provider"] not in ("",) + ai.PROVIDERS: raise ValueError("Invalid AI settings")
+        c["provider"] = d["provider"]; c["port"] = ai.LOCAL.get(c["provider"], 11434)
+    if "model" in d:
+        m = str(d["model"] or "").strip()
+        if m and not ai.MODEL_RE.match(m): raise ValueError("Invalid AI settings")
+        c["model"] = m
+    if "port" in d and c["provider"] in ai.LOCAL:
+        if not isinstance(d["port"], int) or isinstance(d["port"], bool) or not 1024 <= d["port"] <= 65535: raise ValueError("Invalid AI settings")
+        c["port"] = d["port"]
+    if d.get("clear_key") is True: ai_write_key("")
+    elif "key" in d:
+        k = str(d["key"] or "").strip()
+        if not k or len(k) > 300 or re.search(r"\s|[\x00-\x1f]", k): raise ValueError("Invalid AI settings")
+        ai_write_key(k)
+    _atomic_json(data_dir() / "ai.json", {"provider": c["provider"], "model": c["model"], "port": c["port"]})
+    audit(f"ai settings provider={c['provider'] or 'off'} model={c['model'] or 'default'} key={'set' if ai_key()[0] else 'none'}")
+    return ai_status()
+
+def ai_prepare(d):
+    """Everything the AI call needs, from the server's own scan result (never from the browser). Returns (cfg, model, key, payload, labels)."""
+    c = ai_config()
+    if not c["provider"]: raise ai.AIError("ai_off")
+    j = JOBS.get(str(d.get("id", "")))
+    if not j or not re.fullmatch(r"[0-9a-f]{8}", str(d.get("id", ""))): raise ai.AIError("ai_nodata")
+    if j.get("status") == "running": raise ai.AIError("ai_running")
+    lang = d.get("lang") if d.get("lang") in ai.LANG_NAMES else "en"
+    payload, labels = ai.build_payload(j.get("hosts") or [], lang)
+    if not any(h["ports"] for h in payload["hosts"]): raise ai.AIError("ai_nodata")
+    key = ai_key()[0]
+    if ai.is_cloud(c["provider"]) and not key: raise ai.AIError("ai_nokey")
+    model = c["model"] or ai.DEFAULT_MODEL.get(c["provider"], "")
+    if not model: raise ai.AIError("ai_nomodel")
+    return c, model, key, payload, labels
+
+def ai_preview(d):
+    c, model, key, payload, labels = ai_prepare(d)
+    out = {"provider": c["provider"], "model": model, "cloud": ai.is_cloud(c["provider"]), "payload": payload}
+    if out["cloud"]:      # the confirmation covers exactly this data, this provider and this one request
+        now = time.time()
+        for t in [t for t, v in CONSENTS.items() if v[1] < now]: CONSENTS.pop(t, None)
+        if len(CONSENTS) > 20: CONSENTS.clear()
+        tok = secrets.token_urlsafe(16); CONSENTS[tok] = (ai.digest(c["provider"], model, payload), now + CONSENT_TTL); out["consent"] = tok
+    return out
+
+def ai_analyze(d):
+    c, model, key, payload, labels = ai_prepare(d)
+    cloud = ai.is_cloud(c["provider"])
+    if cloud:
+        want = CONSENTS.pop(str(d.get("consent", "")), None)
+        if not want or want[1] < time.time() or not _eq(want[0], ai.digest(c["provider"], model, payload)): raise ai.AIError("ai_consent")
+    if not ai.LOCK.acquire(blocking=False): raise ai.AIError("ai_busy")
+    try:
+        audit(f"ai analysis job={d['id']} provider={c['provider']} model={model} hosts={len(payload['hosts'])} cloud={cloud}")
+        res = ai.parse_answer(ai.call(c["provider"], model, key, c["port"], payload), labels)
+    finally: ai.LOCK.release()
+    res |= {"provider": c["provider"], "model": model, "cloud": cloud, "ts": time.time()}
+    AI_RESULTS[d["id"]] = res
+    if len(AI_RESULTS) > MAX_JOBS:
+        for k in list(AI_RESULTS)[:len(AI_RESULTS) - MAX_JOBS]: AI_RESULTS.pop(k, None)
+    return res
+
 MAX_XML = 128 * 1024 * 1024     # bytes of nmap XML we are willing to parse
 
 def parse(path):
@@ -953,6 +1060,9 @@ class H(BaseHTTPRequestHandler):
         if path == "/api/alerts": return self.send(200, {"alerts": ALERTS[-30:], "seq": ALERT_N[0], "watch": [{"target": w["target"], "profile": w["profile"], "every": w["every"]} for w in WATCH]})
         if path == "/api/net": return self.send(200, {"cidr": local_cidr(), "root": is_admin(), "os": current_os()})
         if path == "/api/devices": return self.send(200, {"devices": load_devices()})
+        if path == "/api/ai": return self.send(200, ai_status())
+        am = re.fullmatch(r"/api/ai/result/([0-9a-f]{8})", path)
+        if am: return self.send(*((200, AI_RESULTS[am.group(1)]) if am.group(1) in AI_RESULTS else (404, {"error": "not found"})))
         if path == "/api/history":
             return self.send(200, [{"id": j["id"], "target": j["target"], "profile": j["profile"], "status": j["status"], "ts": j["ts"], "hosts": len(j["hosts"])} for j in sorted(MANAGER.jobs(), key=lambda x: -x["ts"])])
         m = re.fullmatch(r"/api/scan/([0-9a-f]{8})", path)
@@ -972,6 +1082,13 @@ class H(BaseHTTPRequestHandler):
             except (TypeError, KeyError): return self.send(400, err("Invalid device"))
             except ValueError as e: return self.send(400, err(str(e)))
             except OSError: return self.send(500, {"error": "Could not save the device list", "code": ""})
+        if path in ("/api/ai/config", "/api/ai/preview", "/api/ai/analyze"):
+            try:
+                d = self.body_json(8192, "Invalid AI settings")
+                return self.send(200, {"/api/ai/config": ai_set_config, "/api/ai/preview": ai_preview, "/api/ai/analyze": ai_analyze}[path](d))
+            except ai.AIError as e: return self.send(AI_ERR_STATUS.get(e.code, 400), {"error": str(e), "code": e.code})
+            except (ValueError, TypeError, KeyError): return self.send(400, err("Invalid AI settings"))
+            except OSError: return self.send(500, {"error": "Could not save the AI settings", "code": ""})
         sm = re.fullmatch(r"/api/stop/([0-9a-f]{8})", path)
         if sm: return self.send(*((200, {"ok": True}) if MANAGER.stop(sm.group(1)) else (404, {"error": "not found"})))
         if path not in ("/api/scan", "/api/watch"): return self.send(404, {"error": "not found"})
@@ -1020,6 +1137,9 @@ QUIET = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}  # hide har
  
 def open_window(url, srv):
     """Native-feeling window: pywebview if installed, else a Chromium-family --app window, else the default browser."""
+    if IS_WIN:
+        try: import ctypes; ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Meridian.Scanner")   # own taskbar identity, not "Python"
+        except (AttributeError, OSError, ImportError): pass
     if hasattr(os, "geteuid") and os.geteuid() == 0:
         # Chromium refuses to run as root, so start the window as the user who ran sudo.
         user, b = os.environ.get("SUDO_USER"), find_browser()
@@ -1051,7 +1171,7 @@ def open_window(url, srv):
     print(T("win.default"))
     wait_forever()
  
-KNOWN_DATA = ("history.json", "audit.log", "audit.log.1", "devices.json", "browser-profile")
+KNOWN_DATA = ("history.json", "audit.log", "audit.log.1", "devices.json", "ai.json", "ai.key", "browser-profile")
 
 def unsafe_data_dir(p):
     """True for a folder that must never be deleted as 'Meridian data': a filesystem root, the home folder or any folder above it."""

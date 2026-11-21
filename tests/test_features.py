@@ -223,5 +223,23 @@ class Live(unittest.TestCase):
         c, d = self.req("/api/alerts"); self.assertIn("seq", d); self.assertIsInstance(d["alerts"], list)
 
 
+class Reports(unittest.TestCase):
+    """Static checks on the export code in index.html (the real browser run is covered by hand: tools/preflight.py cannot click)."""
+    HTML = (server.ROOT / "index.html").read_text(encoding="utf-8")
+
+    def test_the_save_helper_does_not_shadow_the_translate_function(self):
+        # dl(n, t, m) once took the file text as `t` and then called t("toast.saved"): the save worked, the toast threw and a second browser download started
+        self.assertRegex(self.HTML, r"const dl=async\(n,d,m\)=>")
+        self.assertNotRegex(self.HTML, r"const dl=async\([^)]*\bt\b[^)]*\)=>")
+
+    def test_branding_is_validated_before_it_reaches_a_report(self):
+        for needle in ("LOGO_RE", "^#[0-9a-f]{6}$", "300*1024", "img-src data:", "esc(b.company)"): self.assertIn(needle, self.HTML)
+        self.assertNotIn("${b.company}", self.HTML); self.assertNotIn("${b.client}", self.HTML)
+
+    def test_every_export_format_is_wired(self):
+        for f in ("html", "md", "json", "csv", "xml", "ips"): self.assertIn(f'data-f="{f}"', self.HTML)
+        self.assertIn("pdf:printReport", self.HTML); self.assertIn('id="brb"', self.HTML)
+
+
 if __name__ == "__main__":
     unittest.main()

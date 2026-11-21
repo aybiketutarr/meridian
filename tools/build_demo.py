@@ -15,7 +15,7 @@ def build():
     assert ui.count('const TOKEN="__TOKEN__"') == 1 and "<title>Meridian</title>" in ui and "v__VERSION__" in ui
     assert ui.count("/*__LOCALES__*/{}") == 1 and ui.count('DEFLANG="__LANG__"') == 1
     out = ui.replace("<title>Meridian</title>", "<title>Meridian - live demo (sample data)</title>")
-    out = out.replace("v__VERSION__", "v" + version).replace(' nonce="__NONCE__"', "")       # a static page: no CSP nonce
+    out = out.replace("v__VERSION__", "v" + version).replace('const VER="__VERSION__"', f'const VER="{version}"').replace(' nonce="__NONCE__"', "")       # a static page: no CSP nonce
     out = out.replace("/*__LOCALES__*/{}", server.locales_js()).replace('DEFLANG="__LANG__"', 'DEFLANG=""')    # no forced language: the browser decides
     # the shim answers /api/* in the browser; it runs in its own <script> before the real one
     return out.replace('const TOKEN="__TOKEN__"', "window.DEMO_MODE=true;\n" + shim + "</script>\n \n<script>\n" + 'const TOKEN="demo"')

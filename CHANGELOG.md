@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.5.1
+* **One-click installers:** `Meridian-Setup-<version>.exe` for Windows (no Python needed, per-user install, Start Menu and optional desktop icon, uninstall in Settings) and `meridian_<version>_all.deb` for Debian, Ubuntu, Kali and Mint (installs nmap with it). The terminal installers (`install.py`, `install.sh`, `install.bat`) stay. macOS stays a manual install.
+* New `tools/build_deb.py` (standard library only), `installer/meridian.iss` and `.github/workflows/release.yml` (builds both files on a version tag). The Windows exe is not code-signed yet, so SmartScreen shows a warning on first run.
+* **Report branding:** a new button next to Export opens "Report branding": company or team, client, author, confidentiality note, accent colour and a logo (PNG, JPG, WebP or SVG, up to 300 KB). It is stored only in the browser and used in the HTML report, the PDF and the Markdown report. Reports now start with a header, a date, a summary (hosts, ports, findings, posture, counts per severity) and carry a footer.
+* **Print / PDF** now prints the branded report instead of the app window.
+* Fixed: after a successful export the file was saved to the downloads folder AND the browser started a second download, and the "Saved to ..." message never appeared (a variable inside the save helper hid the translate function).
+* **App icon on Windows and macOS:** the Start Menu shortcut now shows the Meridian emblem instead of the Python icon, and `Meridian.app` has a real icon (Launchpad, Dock, Finder). New files `assets/meridian.ico`, `meridian.icns`, `meridian.png`, made by `tools/make_icons.py` (Pillow, developer only).
+* Windows: the process gets its own taskbar identity (`Meridian.Scanner`) and the icon cache is refreshed after install. If an old icon lingers, sign out and in once.
+* New look, part 2: the small mascots are replaced by a security backdrop in the top-right corner of every theme (hooded hacker, globe, shield and lock, firewall, radar), drawn behind the UI. Smaller KPI numbers in the top strip. The Blue theme is now a dark navy, and the White theme uses cherry red for its accent colours.
+* Cleanup: removed the unused Waves and Ocean theme code (CSS, canvas animation and their language strings) and a few unused imports. No change in behaviour.
+
+## 0.5.0
+* **AI analysis** (new tab, off by default): plain-language summary, what to fix first and how. Providers: Ollama and LM Studio (local) and Claude and OpenAI (cloud). No pip dependencies (`ai.py`).
+* Privacy by design: no IPs, MACs or host names are ever sent; cloud requests show the exact data and need a single-use confirmation; model output is validated and shown as text only.
+* New look: a redesigned editorial layout (left rail, italic serif headings and numbers, pill controls, rounded cards) five themes (Black, White, Blue, Violet, Ember) and a security backdrop for each theme. The theme follows the system until you choose one. Local fonts only, nothing is loaded from the internet.
+* AI text is added to the HTML and Markdown reports, marked as generated. The live demo shows a ready-made answer and calls no API.
+
 ## 0.4.4 (CI that can turn green)
 * Tests no longer depend on the executable bit of `install.sh` (uploading through the GitHub web page or committing from Windows drops it, which kept CI red for no real reason). The script is still syntax-checked.
 * CI: Linux (Python 3.10 - 3.13) is the gate. macOS and Windows run the same tests as a separate job that reports but does not fail the workflow (`continue-on-error`) until both have been seen green; delete that line to make them required again.

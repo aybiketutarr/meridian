@@ -4,7 +4,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && useradd -m meridian
 WORKDIR /app
-COPY server.py index.html ./
+COPY server.py ai.py index.html ./
 COPY locales ./locales
 COPY assets ./assets
 USER meridian

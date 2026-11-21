@@ -1,4 +1,4 @@
-import json, os, signal, stat, subprocess, sys, tempfile, textwrap, threading, time, unittest, urllib.error, urllib.request
+import json, os, stat, subprocess, sys, tempfile, textwrap, threading, time, unittest, urllib.error, urllib.request
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
