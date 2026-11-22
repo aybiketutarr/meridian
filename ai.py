@@ -8,6 +8,8 @@ LOCAL = {"ollama": 11434, "lmstudio": 1234}
 CLOUD = {"anthropic": "https://api.anthropic.com/v1/messages", "openai": "https://api.openai.com/v1/chat/completions"}
 PROVIDERS = tuple(LOCAL) + tuple(CLOUD)
 DEFAULT_MODEL = {"anthropic": "claude-sonnet-5-5", "openai": "gpt-5", "ollama": "", "lmstudio": ""}
+SUGGESTED = {"anthropic": ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"], "openai": ["gpt-5", "gpt-5-mini"],
+             "ollama": ["llama3.2", "llama3.1:8b", "qwen2.5:7b", "mistral", "gemma2:9b"], "lmstudio": []}   # shown in the model list; "Other" allows any name
 MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/\-]{0,99}$")
 MAX_HOSTS, MAX_PORTS, MAX_CVES, MAX_RESP, TIMEOUT, MAX_TOKENS = 30, 40, 5, 2_000_000, 180, 3000
 SEVS = ("critical", "high", "medium", "low", "info")
