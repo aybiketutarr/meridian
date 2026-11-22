@@ -16,6 +16,7 @@
 * **Yeni görünüm:** sol şeritli editoryal bir yerleşim, beş tema (Siyah, Beyaz, Mavi, Mor, Kor) ve her tema için güvenlik temalı bir arka plan. Yazı tipleri yereldir; internetten hiçbir şey yüklenmez.
 * Windows ve macOS'ta **uygulama simgesi**, Windows'ta kendi görev çubuğu kimliği.
 Önceki sürümler (diller, güvenilir cihazlar, çevrimdışı ipuçları, `meridian --doctor`, güvenlik sertleştirmeleri): [CHANGELOG](CHANGELOG.md).
+* Yapay zeka (AI) sekmesi, artık model seçimini bir metin kutusu yerine liste biçiminde (yüklü yerel modeller, sağlayıcı bazında önerilen modeller ve herhangi bir isim girişi için "Diğer..." seçeneği) sunuyor.
  
 ## Kurulum
  
