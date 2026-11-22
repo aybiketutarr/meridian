@@ -16,7 +16,6 @@
 * **Yeni görünüm:** sol şeritli editoryal bir yerleşim, beş tema (Siyah, Beyaz, Mavi, Mor, Kor) ve her tema için güvenlik temalı bir arka plan. Yazı tipleri yereldir; internetten hiçbir şey yüklenmez.
 * Windows ve macOS'ta **uygulama simgesi**, Windows'ta kendi görev çubuğu kimliği.
 Önceki sürümler (diller, güvenilir cihazlar, çevrimdışı ipuçları, `meridian --doctor`, güvenlik sertleştirmeleri): [CHANGELOG](CHANGELOG.md).
-* Yapay zeka (AI) sekmesi, artık model seçimini bir metin kutusu yerine liste biçiminde (yüklü yerel modeller, sağlayıcı bazında önerilen modeller ve herhangi bir isim girişi için "Diğer..." seçeneği) sunuyor.
  
 ## Kurulum
  
@@ -26,7 +25,7 @@ Sisteminize uygun dosyayı [Releases sayfasından](https://github.com/aybiketuta
  
 | | Dosya | Nasıl |
 |---|---|---|
-| Windows 10/11 | `Meridian-Setup-<sürüm>.exe` | Çift tıklayın. Yönetici izni gerekmeden kullanıcınıza kurulur, Başlat Menüsü girişi ve isteğe bağlı masaüstü simgesi ekler. ⚠️ Dosya henüz imzalı olmadığı için Windows mavi bir **SmartScreen** sayfası gösterebilir: **Ek bilgi**, sonra **Yine de çalıştır** deyin. *Ayarlar > Uygulamalar* üzerinden kaldırılır. |
+| Windows 10/11 | `Meridian-Setup-<sürüm>.exe` | Çift tıklayın. Yönetici izni gerekmeden kullanıcınıza kurulur, Başlat Menüsü girişi ve isteğe bağlı masaüstü simgesi ekler. Dosya henüz imzalı olmadığı için Windows mavi bir **SmartScreen** sayfası gösterebilir: **Ek bilgi**, sonra **Yine de çalıştır** deyin. *Ayarlar > Uygulamalar* üzerinden kaldırılır. |
 | Debian, Ubuntu, Kali, Mint | `meridian_<sürüm>_all.deb` | Çift tıklayın (yazılım merkezi açılır) ya da `sudo apt install ./meridian_<sürüm>_all.deb`. Kaldırmak için `sudo apt remove meridian`. nmap birlikte kurulur. |
 | macOS | | Şimdilik yalnızca elle kurulum, aşağıya bakın. |
  
@@ -78,8 +77,6 @@ sudo pacman -S --needed python nmap git
 git clone https://github.com/aybiketutarr/meridian.git
 cd meridian
 python install.py                                   # 'meridian' komutunu ve menü girdisini kurar
-meridian --doctor                                   # kurulumu kontrol eder. !! olması normaldir.
-meridian                                            # Meridian'ı başlatır ve tek seferlik bir yerel bağlantı yazdırır. Bu bağlantıyı tarayıcınızda açın.
 ```
  
 Arch'ta `~/.local/bin` varsayılan olarak PATH'te değildir, bu yüzden `meridian` ilk başta "command not found" diyebilir. Yeni bir terminal açın ya da bir kez ekleyin:
@@ -217,6 +214,10 @@ Meridian sonucu cihaz panelinde her portun altında gösterir (en kötüsü önc
  
 Meridian veriyi tarama sonucundan kendisi hazırlar ve her IP adresini, MAC adresini, cihaz adını, üreticiyi ve banner'ı çıkarır; yalnızca işletim sistemi, portlar, servisler, sürümler ve CVE numaraları H1, H2 gibi etiketlerle kalır. Bulut isteği önce tam olarak neyin gideceğini gösterir ve tek kullanımlık onay ister. Yanıt denetlenir, düz metin olarak gösterilir ve HTML ile Markdown raporlarında "üretilmiştir" diye işaretlenir: uygulamadan önce doğrulayın. Ayrıntılar [SECURITY.md](SECURITY.md) içinde.
  
+Model, sekmedeki bir listeden seçilir: Ollama veya LM Studio'da zaten yüklü olan modeller, her sağlayıcı için önerilen modeller ya da herhangi bir ad girmek için **Diğer...** seçeneği. Önerilen bir Ollama modeli henüz yüklü değilse Meridian onu edinmek için gereken `ollama pull` komutunu gösterir.
+ 
+Yerel modeller için yeterli boş RAM gerekir: `llama3.2` gibi 3B bir model için yaklaşık 2 GB, 8B bir model için 5 GB veya daha fazlası. Sistemin belleği biterse işletim sistemi tarayıcı gibi başka programları kapatabilir. Küçük bir makinede veya sanal makinede daha küçük bir model (örneğin `llama3.2:1b`) ya da bir bulut sağlayıcı kullanın.
+ 
 ## Güvenlik modeli
 Yalnızca localhost'a bağlanma, çalıştırma başına belirteç (sabit zamanlı karşılaştırma), Host ve Origin denetimleri, sıkı CSP, beyaz listeli tarama seçenekleri, sıkı hedef doğrulaması, aynı anda tek tarama (tek bir `ScanManager`), 1 saatlik tarama sınırı, herkese açık hedef onayı, her taramadan önce yetki onay kutusu ve veri klasöründe yerel denetim günlüğü (1 MB'ta döner; geçmiş, cihazlar ve denetim günlüğü özel dosyalardır). Geçici dosyalar rastgele adlı özel bir klasörde durur ve her nmap kendi süreç grubunda (Windows'ta süreç ağacı) çalışır; durdurma, zaman sınırı, çıkış ve çökme kurtarmasında durdurulur ve toplanır. Windows'ta port özel olarak bağlanır, başka hiçbir program paylaşamaz. Bkz. [SECURITY.md](SECURITY.md).
  
@@ -255,3 +256,4 @@ Sağdan sola diller, isteğe bağlı vulners API anahtarı ayarı ("aktif sömü
  
 ## Lisans
 MIT - bkz. [LICENSE](LICENSE).
+ 
