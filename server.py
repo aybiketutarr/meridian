@@ -805,7 +805,7 @@ def ai_write_key(k):
 
 def ai_status():
     c = ai_config(); k, src = ai_key()
-    return {"provider": c["provider"], "model": c["model"], "port": c["port"], "default_model": ai.DEFAULT_MODEL.get(c["provider"], ""), "cloud": ai.is_cloud(c["provider"]),
+    return {"provider": c["provider"], "model": c["model"], "port": c["port"], "default_model": ai.DEFAULT_MODEL.get(c["provider"], ""), "suggested": list(ai.SUGGESTED.get(c["provider"], [])), "cloud": ai.is_cloud(c["provider"]),
             "key": bool(k), "key_src": src, "providers": list(ai.PROVIDERS), "models": ai.list_local_models(c["provider"], c["port"]) if c["provider"] in ai.LOCAL else []}
 
 def ai_set_config(d):
