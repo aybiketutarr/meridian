@@ -16,7 +16,6 @@ Changes since 0.4.4 (they arrived in 0.5.0, 0.5.1 and 0.5.2):
 * **New look:** an editorial layout with a left rail, five themes (Black, White, Blue, Violet, Ember) and a security-themed backdrop for each. Fonts are local; nothing is loaded from the internet.
 * **App icon** on Windows and macOS, and a Windows taskbar identity of its own.
 Earlier versions (languages, trusted devices, offline hints, `meridian --doctor`, security hardening): see the [CHANGELOG](CHANGELOG.md).
-* The AI tab now offers the model as a list (installed local models, suggested models per provider, "Other..." for any name) instead of a text box.
  
 ## Installation
  
@@ -26,7 +25,7 @@ Download the file for your system from the [Releases page](https://github.com/ay
  
 | | File | How |
 |---|---|---|
-| Windows 10/11 | `Meridian-Setup-<version>.exe` | Double-click. Installs for your user (no administrator), adds a Start Menu entry and an optional desktop icon. ⚠️ Windows may show a blue **SmartScreen** page because the file is not signed yet: choose **More info**, then **Run anyway**. Uninstall in *Settings > Apps*. |
+| Windows 10/11 | `Meridian-Setup-<version>.exe` | Double-click. Installs for your user (no administrator), adds a Start Menu entry and an optional desktop icon. Windows may show a blue **SmartScreen** page because the file is not signed yet: choose **More info**, then **Run anyway**. Uninstall in *Settings > Apps*. |
 | Debian, Ubuntu, Kali, Mint | `meridian_<version>_all.deb` | Double-click (the software centre opens) or `sudo apt install ./meridian_<version>_all.deb`. Remove with `sudo apt remove meridian`. nmap is installed with it. |
 | macOS | | Manual install only for now, see below. |
  
@@ -78,8 +77,6 @@ sudo pacman -S --needed python nmap git
 git clone https://github.com/aybiketutarr/meridian.git
 cd meridian
 python install.py                                   # installs the 'meridian' command and a menu entry
-meridian --doctor                                   # checks the installation. It is normal for '!!' to appear.
-meridian                                            # Starts Meridian and prints a one-time local link. Open it in your browser.
 ```
  
 `~/.local/bin` is not in the PATH on Arch by default, so `meridian` may be "command not found" at first. Open a new terminal or add it once:
@@ -217,6 +214,10 @@ Open the **AI** tab and choose a provider; until then nothing is used and nothin
  
 Meridian builds the data itself from the scan result and removes every IP address, MAC address, host name, vendor and banner; only OS, ports, services, versions and CVE ids remain, under labels like H1, H2. A cloud request first shows you the exact data and needs a single-use confirmation. The answer is checked, shown as plain text and marked as generated in the HTML and Markdown reports: verify it before acting. More in [SECURITY.md](SECURITY.md).
  
+The model is chosen from a list in the tab: the models already installed in Ollama or LM Studio, plus suggested ones for each provider, or **Other...** for any name. A suggested Ollama model that is not installed yet shows the `ollama pull` command to get it.
+ 
+Local models need free RAM: about 2 GB for a 3B model such as `llama3.2`, 5 GB or more for an 8B model. If the system runs out of memory, the operating system may close other programs, for example the browser. On a small machine or virtual machine, use a smaller model (for example `llama3.2:1b`) or a cloud provider.
+ 
 ## Security model
 Localhost-only binding, per-run token (constant-time compare), Host and Origin checks, strict CSP, whitelisted scan options, strict target validation, one scan at a time (a single `ScanManager`), 1-hour scan limit, public-target confirmation, authorization checkbox before every scan, and a local audit log in the data folder (rotated at 1 MB; history, devices and the audit log are private files). Scratch files live in a private directory with a random name, and every nmap runs in its own process group (Windows: process tree) that is stopped and reaped on stop, time limit, exit and crash recovery. On Windows the port is bound exclusively, so no other program can share it. See [SECURITY.md](SECURITY.md).
  
@@ -255,3 +256,4 @@ Right-to-left languages, optional vulners API key setting (adds the "actively ex
  
 ## License
 MIT - see [LICENSE](LICENSE).
+ 
