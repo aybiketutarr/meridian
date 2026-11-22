@@ -77,7 +77,7 @@ sudo pacman -S --needed python nmap git
 git clone https://github.com/aybiketutarr/meridian.git
 cd meridian
 python install.py                                   # installs the 'meridian' command and a menu entry
-meridian --doctor                                   # check your setup
+meridian --doctor                                   # checks the installation. It is normal for '!!' to appear.
 meridian                                            # Starts Meridian and prints a one-time local link. Open it in your browser.
 ```
  
