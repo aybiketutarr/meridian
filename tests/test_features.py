@@ -227,6 +227,11 @@ class Reports(unittest.TestCase):
     """Static checks on the export code in index.html (the real browser run is covered by hand: tools/preflight.py cannot click)."""
     HTML = (server.ROOT / "index.html").read_text(encoding="utf-8")
 
+    def test_dialogs_stay_inside_the_screen_and_are_compact_on_a_phone(self):
+        css = self.HTML.split("</style>")[0]
+        self.assertIn(".modal .box{max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);overflow-y:auto", css)     # a tall dialog scrolls inside instead of hiding its buttons
+        self.assertIn(".brm .aig{grid-template-columns:1fr 1fr", css); self.assertIn('m.className="modal brm"', self.HTML)
+
     def test_the_save_helper_does_not_shadow_the_translate_function(self):
         # dl(n, t, m) once took the file text as `t` and then called t("toast.saved"): the save worked, the toast threw and a second browser download started
         self.assertRegex(self.HTML, r"const dl=async\(n,d,m\)=>")

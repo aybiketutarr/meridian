@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.2
+* **Windows installer installs nmap for you:** at the end of setup it offers "Install nmap now". It uses winget, which downloads nmap from its own verified source and shows nmap's normal setup (it asks for permission and installs Npcap). Without winget the nmap download page is offered instead, as before. nmap is handled before Meridian starts, so Meridian finds it.
+* Fixed: opening Meridian a second time while it was already open did nothing. The second window was handed to the browser of the first one and the second Meridian stopped at once. It now opens its own window with a temporary browser profile (its settings are not kept, the first window keeps them). Saved scan history is shared by both; if both save scans, the one that saves last wins.
+* Fixed: dialogs (for example Report branding) were too big on a phone and could hide their buttons. They now stay inside the screen, scroll inside when needed and use smaller type, spacing and a two-column colour/logo row on narrow screens.
+
 ## 0.5.1
 * **One-click installers:** `Meridian-Setup-<version>.exe` for Windows (no Python needed, per-user install, Start Menu and optional desktop icon, uninstall in Settings) and `meridian_<version>_all.deb` for Debian, Ubuntu, Kali and Mint (installs nmap with it). The terminal installers (`install.py`, `install.sh`, `install.bat`) stay. macOS stays a manual install.
 * New `tools/build_deb.py` (standard library only), `installer/meridian.iss` and `.github/workflows/release.yml` (builds both files on a version tag). The Windows exe is not code-signed yet, so SmartScreen shows a warning on first run.

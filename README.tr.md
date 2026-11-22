@@ -6,11 +6,11 @@
  
 > **Sorumlu kullanın.** Yalnızca sahibi olduğunuz veya test etmek için açık izniniz bulunan ağları tarayın.
  
-## 0.5.1'de neler yeni
+## 0.5.2'de neler yeni
  
-0.4.4'ten bu yana gelenler (0.5.0 ve 0.5.1 ile geldiler):
+0.4.4'ten bu yana gelenler (0.5.0, 0.5.1 ve 0.5.2 ile geldiler):
  
-* **Tek tıkla kurulum:** Windows için `Meridian-Setup-<sürüm>.exe` (Python gerekmez), Debian, Ubuntu, Kali ve Mint için `meridian_<sürüm>_all.deb` (nmap birlikte kurulur). Terminal kurucuları duruyor ([Kurulum](#kurulum)).
+* **Tek tıkla kurulum:** Windows için `Meridian-Setup-<sürüm>.exe` (Python gerekmez), Debian, Ubuntu, Kali ve Mint için `meridian_<sürüm>_all.deb` (nmap birlikte kurulur; Windows kurulumu sonunda nmap'i kurmayı önerir). Terminal kurucuları duruyor ([Kurulum](#kurulum)).
 * **Yapay zekâ analizi (isteğe bağlı, varsayılan olarak kapalı):** sade dille özet ve "önce bunu düzeltin" listesi. Ollama ve LM Studio (yerel) ya da Claude ve OpenAI (bulut) ile çalışır. IP, MAC veya cihaz adı asla gönderilmez ([ayrıntılar](#yapay-zekâ-analizi-isteğe-bağlı)).
 * **Rapor markalama:** şirket veya ekip, müşteri, hazırlayan, gizlilik notu, vurgu rengi ve logo; HTML, PDF ve Markdown raporlarında görünür. Raporlar artık bir özetle başlar ve alt bilgiyle biter.
 * **Yeni görünüm:** sol şeritli editoryal bir yerleşim, beş tema (Siyah, Beyaz, Mavi, Mor, Kor) ve her tema için güvenlik temalı bir arka plan. Yazı tipleri yereldir; internetten hiçbir şey yüklenmez.
@@ -29,7 +29,7 @@ Sisteminize uygun dosyayı [Releases sayfasından](https://github.com/aybiketuta
 | Debian, Ubuntu, Kali, Mint | `meridian_<sürüm>_all.deb` | Çift tıklayın (yazılım merkezi açılır) ya da `sudo apt install ./meridian_<sürüm>_all.deb`. Kaldırmak için `sudo apt remove meridian`. nmap birlikte kurulur. |
 | macOS | | Şimdilik yalnızca elle kurulum, aşağıya bakın. |
  
-Gerçek taramalar için **nmap** gerekir. Linux paketi onu kurar; Windows kurulumu indirme sayfasını açmayı önerir. Taramalarınız, cihazlarınız ve ayarlarınız kendi klasörünüzde durur ve güncellemelerde korunur. Terminalle kurmayı sevenler için aşağıdaki kurulumlar da duruyor.
+Gerçek taramalar için **nmap** gerekir. Linux paketi onu kurar; Windows kurulumu sonunda onu sizin için kurmayı önerir (winget ile; winget yoksa indirme sayfasını açar). Taramalarınız, cihazlarınız ve ayarlarınız kendi klasörünüzde durur ve güncellemelerde korunur. Terminalle kurmayı sevenler için aşağıdaki kurulumlar da duruyor.
  
 Geliştiriciler için: `python3 tools/build_deb.py` paketi üretir; `v0.5.1` gibi bir etiket gönderince GitHub iki dosyayı da kendisi derler (`.github/workflows/release.yml`).
  
@@ -241,7 +241,7 @@ Her push'tan önce `python3 tools/preflight.py` çalıştırın: dosyaları, sat
  
 CI aynı komutu **Ubuntu, macOS ve Windows**'ta Python 3.10 - 3.13 ile çalıştırır (`.github/workflows/tests.yml`). Platform mantığının çoğu platform taklit edilerek test edilir, bu yüzden testler her yerde çalışır; yalnızca Windows ve macOS'a özgü sistem çağrıları (kayıt defteri, PowerShell kısayolu, `ps`) taklitlerle kapsanır ve son kontrol için gerçek makine ister.
  
-Sürümler: sürüm numarası `server.py` başındaki `VERSION` içindedir. Her sürümde artırın ve aynı numarayı GitHub'da etiketleyin (örneğin `v0.5.1`).
+Sürümler: sürüm numarası `server.py` başındaki `VERSION` içindedir. Her sürümde artırın ve aynı numarayı GitHub'da etiketleyin (örneğin `v0.5.2`).
  
 Yapı: `server.py` (HTTP sunucusu, `ScanManager`, nmap çalıştırıcı, ayrıştırıcı, doğrulama, platform yardımcıları, terminal dilleri), `ai.py` (isteğe bağlı yapay zekâ analizi), `index.html` (tek dosya arayüz), `locales/*.json` (tüm metinler), `install.py` (+ `install.sh`, `install.bat`), `installer/meridian.iss` (Windows kurulumu), `assets/` (simgeler), `docs/` (yalnızca tarayıcıda çalışan demo), `tools/` (`build_demo.py`, `build_deb.py`, `make_icons.py`, `preflight.py`), `.github/workflows/` (test ve sürüm), `tests/`, `Dockerfile`.
  

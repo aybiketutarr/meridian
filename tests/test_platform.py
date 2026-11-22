@@ -232,5 +232,28 @@ class Doctor(unittest.TestCase):
         self.assertEqual(set(st.values()) - {"ok", "warn"}, set()); self.assertEqual(st["nmap"], "ok"); self.assertEqual(st["Scan privileges"], "ok")
 
 
+class Windows2(unittest.TestCase):
+    """A second Meridian opened while the first is still running (a double click on the shortcut twice)."""
+    def window(self, primary):
+        seen = []
+        def fake_run(cmd, **kw):
+            seen.append(Path(next(a for a in cmd if a.startswith("--user-data-dir=")).split("=", 1)[1]))
+            return types.SimpleNamespace(returncode=0)
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(server, "HIST", Path(d) / "history.json"), mock.patch.object(server, "PRIMARY", primary), \
+             mock.patch.object(server, "find_browser", return_value="/usr/bin/chromium"), mock.patch.object(server.subprocess, "run", side_effect=fake_run), \
+             mock.patch.object(server.os, "geteuid", create=True, return_value=1000), mock.patch.dict(sys.modules, {"webview": None}):
+            server.open_window("http://127.0.0.1:1/?k=x", None)
+            return seen[0], Path(d) / "browser-profile", seen[0].exists()
+
+    def test_the_first_window_keeps_the_persistent_profile(self):
+        used, persistent, _ = self.window(True)
+        self.assertEqual(used, persistent)
+
+    def test_a_second_window_gets_its_own_throwaway_profile(self):
+        # Chromium hands a window opened with a busy profile to the running browser and returns at once; the second Meridian would then stop its server
+        used, persistent, still_there = self.window(False)
+        self.assertNotEqual(used, persistent); self.assertFalse(still_there)
+
+
 if __name__ == "__main__":
     unittest.main()

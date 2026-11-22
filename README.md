@@ -6,11 +6,11 @@ A live web UI on top of the **nmap** engine: scan profiles, radial topology map,
  
 > **Use responsibly.** Scan only networks you own or have explicit permission to test.
  
-## What is new in 0.5.1
+## What is new in 0.5.2
  
-Changes since 0.4.4 (they arrived in 0.5.0 and 0.5.1):
+Changes since 0.4.4 (they arrived in 0.5.0, 0.5.1 and 0.5.2):
  
-* **One-click installers:** `Meridian-Setup-<version>.exe` for Windows (no Python needed) and `meridian_<version>_all.deb` for Debian, Ubuntu, Kali and Mint (nmap is installed with it). The terminal installers stay ([Installation](#installation)).
+* **One-click installers:** `Meridian-Setup-<version>.exe` for Windows (no Python needed) and `meridian_<version>_all.deb` for Debian, Ubuntu, Kali and Mint (nmap is installed with it; the Windows setup offers to install nmap at the end). The terminal installers stay ([Installation](#installation)).
 * **AI analysis (optional, off by default):** a plain-language summary and a "fix this first" list. Works with Ollama and LM Studio (local) or Claude and OpenAI (cloud). No IP, MAC or host name is ever sent ([details](#ai-analysis-optional)).
 * **Report branding:** add your company or team, client, author, confidentiality note, accent colour and logo; they appear in the HTML, PDF and Markdown reports, which now start with a summary and end with a footer.
 * **New look:** an editorial layout with a left rail, five themes (Black, White, Blue, Violet, Ember) and a security-themed backdrop for each. Fonts are local; nothing is loaded from the internet.
@@ -29,7 +29,7 @@ Download the file for your system from the [Releases page](https://github.com/ay
 | Debian, Ubuntu, Kali, Mint | `meridian_<version>_all.deb` | Double-click (the software centre opens) or `sudo apt install ./meridian_<version>_all.deb`. Remove with `sudo apt remove meridian`. nmap is installed with it. |
 | macOS | | Manual install only for now, see below. |
  
-Real scans need **nmap**. The Linux package installs it; on Windows the installer offers to open the download page. Your scans, devices and settings live in your own folder and survive updates. The terminal installers below stay available for everyone who prefers them.
+Real scans need **nmap**. The Linux package installs it; on Windows the installer offers to install it for you at the end of setup (through winget; without winget it opens the download page). Your scans, devices and settings live in your own folder and survive updates. The terminal installers below stay available for everyone who prefers them.
  
 Maintainers: `python3 tools/build_deb.py` builds the package; pushing a tag such as `v0.5.1` makes GitHub build both files (`.github/workflows/release.yml`).
  
@@ -241,7 +241,7 @@ Before every push run `python3 tools/preflight.py`: it checks the files, line en
  
 CI runs the same command on **Ubuntu, macOS and Windows** with Python 3.10 - 3.13 (`.github/workflows/tests.yml`). Most platform logic is tested by faking the platform, so the tests also run everywhere; Windows- and macOS-only system calls (registry, PowerShell shortcut, `ps`) are covered with fakes and need a real machine for a final check.
  
-Releases: the version number lives in `VERSION` at the top of `server.py`. Bump it for every release and tag the same number on GitHub (for example `v0.5.1`).
+Releases: the version number lives in `VERSION` at the top of `server.py`. Bump it for every release and tag the same number on GitHub (for example `v0.5.2`).
  
 Layout: `server.py` (HTTP server, `ScanManager`, nmap runner, parser, validation, platform helpers, languages for the terminal), `ai.py` (optional AI analysis), `index.html` (single-file UI), `locales/*.json` (all texts), `install.py` (+ `install.sh`, `install.bat`), `installer/meridian.iss` (Windows setup), `assets/` (icons), `docs/` (browser-only demo), `tools/` (`build_demo.py`, `build_deb.py`, `make_icons.py`, `preflight.py`), `.github/workflows/` (tests and release), `tests/`, `Dockerfile`.
  

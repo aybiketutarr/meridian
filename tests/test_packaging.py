@@ -73,6 +73,13 @@ class Windows(unittest.TestCase):
         self.assertIn("{#AppVersion}", self.ISS); self.assertRegex(self.ISS, r"AppId=\{\{[0-9A-F-]{36}\}")
         self.assertIn("PrivilegesRequired=lowest", self.ISS)            # no administrator needed
 
+    def test_installer_offers_nmap_before_it_starts_meridian(self):
+        # winget fetches nmap from its own verified source and shows nmap's normal setup; without winget the download page is offered instead
+        self.assertIn("winget install --id Insecure.Nmap", self.ISS); self.assertIn("function WingetAvailable", self.ISS)
+        self.assertIn("https://nmap.org/download.html#windows", self.ISS)
+        self.assertLess(self.ISS.index("winget install"), self.ISS.index("{cm:LaunchProgram"))      # Meridian starts after nmap is there
+        self.assertNotIn("/S ", self.ISS.split("[Run]")[1].split("[Code]")[0].replace("/C winget", ""))   # never a silent nmap install
+
     def test_pyinstaller_ships_everything_the_installer_copies(self):
         for name in server.APP_DIRS: self.assertIn(f'--add-data "{name};{name}"', self.FLOW)
         self.assertIn('--add-data "index.html;."', self.FLOW); self.assertIn("--hidden-import ai", self.FLOW)

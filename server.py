@@ -10,7 +10,8 @@ import math
 import ai
  
 PORT = 0  # chosen at start-up (free port)
-VERSION = "0.5.1"   # bump for every release and tag the same number on GitHub (v0.5.1)
+PRIMARY = True  # False when the usual port was busy: another Meridian is already open
+VERSION = "0.5.2"   # bump for every release and tag the same number on GitHub (v0.5.2)
 TOKEN = secrets.token_urlsafe(16)
 # Local access control. The page and every API call need a session cookie, and the only way to get one is the single-use launch key in the URL that
 # Meridian opens itself (and prints). Another program or another user on the same machine can reach 127.0.0.1, but without the key it can neither
@@ -1163,9 +1164,17 @@ def open_window(url, srv):
         pass
     b = find_browser()
     if b:
-        prof = HIST.parent / "browser-profile"   # persistent, so theme, presets and notes survive restarts
-        prof.mkdir(parents=True, exist_ok=True, mode=0o700)
-        subprocess.run([b, f"--app={url}", f"--user-data-dir={prof}", "--window-size=1360,860", "--no-first-run", "--disable-extensions", "--log-level=3"], **QUIET)
+        if PRIMARY:
+            prof = HIST.parent / "browser-profile"   # persistent, so theme, presets and notes survive restarts
+            prof.mkdir(parents=True, exist_ok=True, mode=0o700)
+        else:
+            # Another Meridian already owns that profile. Chromium would hand this window to the browser that is running and return at once,
+            # and that would stop this server before the page loads. A throwaway profile makes it a window of its own that we wait for.
+            prof = Path(tempfile.mkdtemp(prefix="meridian-ui-"))
+        try:
+            subprocess.run([b, f"--app={url}", f"--user-data-dir={prof}", "--window-size=1360,860", "--no-first-run", "--disable-extensions", "--log-level=3"], **QUIET)
+        finally:
+            if not PRIMARY: shutil.rmtree(prof, ignore_errors=True)
         return
     import webbrowser; webbrowser.open(url)
     print(T("win.default"))
@@ -1283,7 +1292,7 @@ if __name__ == "__main__":
             except (ValueError, OSError): pass
     load_history(); threading.Thread(target=watcher, daemon=True).start()
     try: srv = Server(("127.0.0.1", int(os.environ.get("MERIDIAN_PORT", 8765))), H)   # fixed port keeps browser storage (theme, notes) stable
-    except (OSError, ValueError): srv = Server(("127.0.0.1", 0), H)                    # busy: any free port
+    except (OSError, ValueError): srv, PRIMARY = Server(("127.0.0.1", 0), H), False   # busy: another Meridian is open, so any free port
     PORT = srv.server_address[1]
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     url = launch_url()
