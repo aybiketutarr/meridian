@@ -77,6 +77,8 @@ sudo pacman -S --needed python nmap git
 git clone https://github.com/aybiketutarr/meridian.git
 cd meridian
 python install.py                                   # 'meridian' komutunu ve menü girdisini kurar
+meridian --doctor                                   # kurulumu kontrol eder. !! olması normaldir.
+meridian                                            # Meridian'ı başlatır ve tek seferlik bir yerel bağlantı yazdırır. Bu bağlantıyı tarayıcınızda açın.
 ```
  
 Arch'ta `~/.local/bin` varsayılan olarak PATH'te değildir, bu yüzden `meridian` ilk başta "command not found" diyebilir. Yeni bir terminal açın ya da bir kez ekleyin:
