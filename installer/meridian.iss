@@ -1,5 +1,5 @@
 ; Inno Setup script: builds Meridian-Setup-<version>.exe from the PyInstaller folder dist\Meridian.
-; CI does it for you (.github/workflows/release.yml). By hand:  iscc /DAppVersion=0.5.1 installer\meridian.iss
+; CI does it for you (.github/workflows/release.yml). By hand:  iscc /DAppVersion=0.5.2 installer\meridian.iss
 #ifndef AppVersion
   #define AppVersion "0.0.0"
 #endif
@@ -54,14 +54,32 @@ Name: "{autoprograms}\Meridian"; Filename: "{app}\Meridian.exe"
 Name: "{autodesktop}\Meridian"; Filename: "{app}\Meridian.exe"; Tasks: desktopicon
 
 [Run]
+; Real scans need nmap. When it is missing, winget downloads it from its own verified source and shows nmap's normal setup (it asks for permission and installs Npcap).
+; Without winget the nmap download page is offered instead. nmap goes first, so Meridian finds it when it starts.
+Filename: "{cmd}"; Parameters: "/C winget install --id Insecure.Nmap -e --interactive --accept-package-agreements --accept-source-agreements"; Description: "Install nmap now (needed for real scans)"; Flags: postinstall skipifsilent runasoriginaluser; Check: (not NmapInstalled) and WingetAvailable
+Filename: "https://nmap.org/download.html#windows"; Description: "Open the nmap download page (needed for real scans)"; Flags: shellexec postinstall skipifsilent unchecked; Check: (not NmapInstalled) and (not WingetAvailable)
 Filename: "{app}\Meridian.exe"; Description: "{cm:LaunchProgram,Meridian}"; Flags: nowait postinstall skipifsilent
-; Real scans need nmap. Offered only when it is not installed yet (its installer asks for its own permissions and installs Npcap).
-Filename: "https://nmap.org/download.html#windows"; Description: "Open the nmap download page (needed for real scans)"; Flags: shellexec postinstall skipifsilent unchecked; Check: not NmapInstalled
 
 [Code]
 function NmapInstalled: Boolean;
 begin
   Result := FileExists(ExpandConstant('{commonpf}\Nmap\nmap.exe')) or FileExists(ExpandConstant('{commonpf32}\Nmap\nmap.exe'));
+end;
+
+var
+  WingetChecked, WingetOk: Boolean;
+
+// winget ships with current Windows 10/11 ("App Installer"). Asked once.
+function WingetAvailable: Boolean;
+var
+  Code: Integer;
+begin
+  if not WingetChecked then
+  begin
+    WingetChecked := True;
+    WingetOk := Exec(ExpandConstant('{cmd}'), '/C winget --version', '', SW_HIDE, ewWaitUntilTerminated, Code) and (Code = 0);
+  end;
+  Result := WingetOk;
 end;
 
 // The program is removed in any case. Saved scans, devices and notes are only deleted if the person says yes (silent uninstall keeps them).
