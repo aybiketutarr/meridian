@@ -15,7 +15,7 @@ const demo=(lk,off)=>D.map(([i,n,o,ps,v])=>({ip:i,mac:"",name:n,os:o,vuln:v,
   scripts:p===445?[{id:"smb-vuln-ms17-010",out:"VULNERABLE: Remote Code Execution (CVE-2017-0143)"}]:[]},d=lk&&DV[i+":"+p]||off&&OV[i+":"+p];
   if(d)x.vulns={mode:lk?"free":"offline",total:d.length,cves:d.length,exploits:d.filter(a=>a.exploit).length,kev:0,items:d};return x})}));
 const jobs={},watch=[];let n=0,devices={};
-const AI={provider:"anthropic",model:"",port:11434,default_model:"claude-sonnet-5-5",cloud:true,key:true,key_src:"file",providers:["ollama","lmstudio","anthropic","openai"],models:[]};
+const AI={provider:"anthropic",model:"",port:11434,default_model:"claude-sonnet-5-5",cloud:true,key:true,key_src:"file",providers:["ollama","lmstudio","anthropic","openai"],models:[],suggested:["claude-sonnet-5-5","claude-opus-5-5","claude-haiku-5-5"]};
 const res=(c,b)=>new Response(JSON.stringify(b),{status:c,headers:{"Content-Type":"application/json"}});
 window.fetch=async(u,o)=>{
  const p=String(u),post=o&&o.method==="POST",b=post?JSON.parse(o.body||"{}"):{};
@@ -33,7 +33,7 @@ window.fetch=async(u,o)=>{
  /* AI: the demo never calls a model. It shows the same screens with a ready-made answer. */
  if(p==="/api/ai"||p==="/api/ai/config"||p==="/api/ai/preview"||p==="/api/ai/analyze"||/^\/api\/ai\/result\//.test(p)){
   if(p==="/api/ai"&&!post)return res(200,AI);
-  if(p==="/api/ai/config"){if("provider"in b){AI.provider=b.provider;AI.cloud=b.provider==="anthropic"||b.provider==="openai";AI.default_model={anthropic:"claude-sonnet-5-5",openai:"gpt-5"}[b.provider]||""}if("model"in b)AI.model=String(b.model).slice(0,100);AI.key=AI.cloud;return res(200,AI)}
+  if(p==="/api/ai/config"){if("provider"in b){AI.provider=b.provider;AI.cloud=b.provider==="anthropic"||b.provider==="openai";AI.default_model={anthropic:"claude-sonnet-5-5",openai:"gpt-5"}[b.provider]||"";AI.suggested={anthropic:["claude-sonnet-5-5","claude-opus-5-5","claude-haiku-5-5"],openai:["gpt-5","gpt-5-mini"],ollama:["llama3.2","llama3.1:8b","qwen2.5:7b","mistral","gemma2:9b"]}[b.provider]||[]}if("model"in b)AI.model=String(b.model).slice(0,100);AI.key=AI.cloud;return res(200,AI)}
   const j=jobs[b.id];if(post&&(!AI.provider))return res(400,{error:"AI is off",code:"ai_off"});if(post&&!j)return res(400,{error:"no data",code:"ai_nodata"});
   const anon=j&&j.hosts.map((h,i)=>({host:"H"+(i+1),os:h.os,ports:h.ports.map(q=>({port:q.port,proto:q.proto,service:q.service,product:q.version.replace(/\s*[\d.]+$/,""),version:(q.version.match(/[\d.]+$/)||[""])[0],cves:(q.vulns?q.vulns.items:[]).map(v=>({id:v.id,cvss:v.cvss,exploit:v.exploit,kev:false}))}))}));
   if(p==="/api/ai/preview")return res(200,{provider:AI.provider,model:AI.model||AI.default_model||"demo",cloud:AI.cloud,payload:{language:b.lang,hosts:anon},consent:"demo"});
