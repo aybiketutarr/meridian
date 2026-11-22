@@ -419,11 +419,18 @@ const aiMd=()=>aiHere()?`\n\n## ${t("rep.ai")}\n${mdx(aiBy(aiRes))}\n\n${mdx(aiR
 const aiHtml=()=>aiHere()?`<h2>${esc(t("rep.ai"))}</h2><p><i>${esc(aiBy(aiRes))}</i></p><p>${esc(aiRes.summary)}</p><ul>${aiRes.priorities.map(p=>`<li><b>${esc(aiSev(p.severity))}</b> ${esc(p.host)} ${esc(p.issue)} ${esc(p.fix)}`).join("")}</ul>`:"";
 async function loadAI(){try{ai=await (await fetch("/api/ai")).json()}catch(e){ai=null}
  if(jid&&aiFor!==jid){try{const r=await fetch("/api/ai/result/"+jid);aiRes=r.ok?await r.json():null;aiFor=jid}catch(e){}}renderAI()}
-function renderAI(){const el=$("#ai");if(!el||!ai)return;if(["ai-m","ai-k","ai-po"].includes(document.activeElement?.id))return;
+let aiOther=false;
+function aiModelField(){const mods=ai.models||[],sug=(ai.suggested||[]).filter(m=>!mods.includes(m)),cur=ai.model||(ai.cloud?ai.default_model:mods[0]||""),
+ other=aiOther||(cur&&!mods.includes(cur)&&!sug.includes(cur)&&!(ai.suggested||[]).includes(cur)),o=m=>`<option value="${esc(m)}" ${!other&&cur===m?"selected":""}>${esc(m)}</option>`,
+ g=(l,a)=>a.length?`<optgroup label="${esc(t(l))}">${a.map(o).join("")}</optgroup>`:"";
+ return `<label>${esc(t("ai.model"))}<select id="ai-m">${ai.cloud?(ai.suggested||[]).map(o).join(""):g("ai.model.inst",mods)+g("ai.model.sugg",sug)}<option value="__other__" ${other?"selected":""}>${esc(t("ai.model.other"))}</option></select></label>`
+ +(other?`<label>${esc(t("ai.model.name"))}<input id="ai-mc" value="${esc(aiOther?"":cur)}" placeholder="${esc(t("ai.model.ph"))}" maxlength="100" autocomplete="off" spellcheck="false"></label>`:"")
+ +(ai.provider==="ollama"&&!other&&cur&&!mods.includes(cur)?`<p class="ainote">${esc(t("ai.model.pull",{m:cur}))}</p>`:"")}
+function renderAI(){const el=$("#ai");if(!el||!ai)return;if(["ai-m","ai-mc","ai-k","ai-po"].includes(document.activeElement?.id))return;
  const loc=ai.provider&&!ai.cloud,can=ai.provider&&hosts.length&&last.status!=="running"&&!aiBusy;
  el.innerHTML=`<div class="card"><b>${esc(t("ai.title"))}</b><p class="mut">${esc(t("ai.desc"))}</p><div class="aig">
  <label>${esc(t("ai.provider"))}<select id="ai-p"><option value="">${esc(t("ai.p.off"))}</option>${ai.providers.map(p=>`<option value="${esc(p)}" ${ai.provider===p?"selected":""}>${esc(t("ai.p."+p))}</option>`).join("")}</select></label>
- ${ai.provider?`<label>${esc(t("ai.model"))}<input id="ai-m" list="ai-ml" value="${esc(ai.model)}" placeholder="${esc(ai.default_model||t("ai.model.ph"))}" maxlength="100" autocomplete="off" spellcheck="false"><datalist id="ai-ml">${ai.models.map(m=>`<option value="${esc(m)}">`).join("")}</datalist></label>`:""}
+ ${ai.provider?aiModelField():""}
  ${loc?`<label>${esc(t("ai.port"))}<input id="ai-po" type="number" min="1024" max="65535" value="${+ai.port}"></label>`:""}
  ${ai.cloud?`<label>${esc(t("ai.key"))}<input id="ai-k" type="password" autocomplete="off" placeholder="${esc(t(ai.key?"ai.key.set":"ai.key.ph"))}"></label>`:""}</div>
  ${ai.provider?`<p class="ainote">${esc(t(ai.cloud?"ai.cloud.note":"ai.local.note"))}${ai.cloud&&ai.key_src==="env"?" "+esc(t("ai.key.env")):""}</p>`:""}
@@ -441,11 +448,12 @@ async function runAI(){if(aiBusy||!jid||!hosts.length)return;aiBusy=true;renderA
   if(d.cloud){if(!await askAI(d))return;b.consent=d.consent}
   r=await api("/api/ai/analyze",b);d=await r.json();if(!r.ok){toast(emsg(d));return}aiRes=d;aiFor=jid}
  catch(e){toast(t("err.ai_unreachable"))}finally{aiBusy=false;renderAI()}}
-document.addEventListener("change",async e=>{if(e.target.id==="ai-p"){if(await aiCfg({provider:e.target.value,model:""}))renderAI();else loadAI()}});
+document.addEventListener("change",async e=>{if(e.target.id==="ai-p"){aiOther=false;if(await aiCfg({provider:e.target.value,model:""})){if(ai.provider&&!ai.cloud&&ai.models.length)await aiCfg({model:ai.models[0]});renderAI()}else loadAI()}
+ if(e.target.id==="ai-m"){const v=e.target.value;e.target.blur();if(v==="__other__"){aiOther=true;renderAI()}else{aiOther=false;if(await aiCfg({model:v}))renderAI();else loadAI()}}});
 document.addEventListener("click",async e=>{const id=e.target.id;if(id==="ai-r")runAI();
  if(id==="ai-c"&&await aiCfg({clear_key:true})){toast(t("ai.saved"),true);renderAI()}
- if(id==="ai-s"){const b={model:$("#ai-m").value.trim()};if($("#ai-po"))b.port=+$("#ai-po").value;if($("#ai-k")&&$("#ai-k").value.trim())b.key=$("#ai-k").value.trim();
-  if(await aiCfg(b)){toast(t("ai.saved"),true);document.activeElement.blur();renderAI()}}});
+ if(id==="ai-s"){const sv=$("#ai-m").value,b={model:sv==="__other__"?($("#ai-mc")?$("#ai-mc").value.trim():""):sv};if($("#ai-po"))b.port=+$("#ai-po").value;if($("#ai-k")&&$("#ai-k").value.trim())b.key=$("#ai-k").value.trim();
+  if(await aiCfg(b)){aiOther=false;toast(t("ai.saved"),true);document.activeElement.blur();renderAI()}}});
 fetch("/api/ai").then(r=>r.json()).then(d=>{ai=d;renderAI()}).catch(()=>{});
 setLang(initLang());
 </script></body></html>
