@@ -157,6 +157,8 @@ footer{background:transparent;border-top:1px solid var(--line)}.empty{font:itali
 /* dialogs never grow past the screen: they scroll inside, and they are compact on a phone */
 .modal .box{max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);overflow-y:auto;overscroll-behavior:contain}
 @media(max-width:600px){.modal .box{width:calc(100% - 24px);padding:16px;border-radius:18px}.modal h3{font-size:22px;margin-bottom:8px}.modal p{font-size:13px;margin-bottom:8px}.modal .row{flex-wrap:wrap;gap:8px;margin-top:10px}.modal .row button{flex:1 1 auto}.brm .aig{grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}.brm .aig label:nth-child(-n+4){grid-column:1/-1}.brm .aig input{padding:7px 10px;font-size:16px}.brm .aig input[type=color]{height:34px}.brm .aig input[type=file]{font-size:12px;padding:5px}#br-p{padding:8px 10px;margin:8px 0}#br-p img{max-height:32px}}
+/* mobile header: row 1 = logo flush left + language at the right; row 2 = theme, report branding, export */
+@media(max-width:1000px){header{row-gap:8px}header::after{content:"";order:3;flex:0 0 100%;height:0;margin-top:-8px}.brand{order:1;flex:1;margin:0}#lang{order:2}#theme{order:4}#brb{order:5}.menu{order:6}.target{order:7}.go{order:8}#demo{order:9}}
 </style></head><body>
 <svg width="0" height="0" style="position:absolute"><defs>
 <symbol id="bolt" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></symbol>
