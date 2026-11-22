@@ -25,7 +25,7 @@ Download the file for your system from the [Releases page](https://github.com/ay
  
 | | File | How |
 |---|---|---|
-| Windows 10/11 | `Meridian-Setup-<version>.exe` | Double-click. Installs for your user (no administrator), adds a Start Menu entry and an optional desktop icon. Windows may show a blue **SmartScreen** page because the file is not signed yet: choose **More info**, then **Run anyway**. Uninstall in *Settings > Apps*. |
+| Windows 10/11 | `Meridian-Setup-<version>.exe` | Double-click. Installs for your user (no administrator), adds a Start Menu entry and an optional desktop icon. ⚠️ Windows may show a blue **SmartScreen** page because the file is not signed yet: choose **More info**, then **Run anyway**. Uninstall in *Settings > Apps*. |
 | Debian, Ubuntu, Kali, Mint | `meridian_<version>_all.deb` | Double-click (the software centre opens) or `sudo apt install ./meridian_<version>_all.deb`. Remove with `sudo apt remove meridian`. nmap is installed with it. |
 | macOS | | Manual install only for now, see below. |
  
