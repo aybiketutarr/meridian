@@ -25,7 +25,7 @@ Sisteminize uygun dosyayı [Releases sayfasından](https://github.com/aybiketuta
  
 | | Dosya | Nasıl |
 |---|---|---|
-| Windows 10/11 | `Meridian-Setup-<sürüm>.exe` | Çift tıklayın. Yönetici izni gerekmeden kullanıcınıza kurulur, Başlat Menüsü girişi ve isteğe bağlı masaüstü simgesi ekler. Dosya henüz imzalı olmadığı için Windows mavi bir **SmartScreen** sayfası gösterebilir: **Ek bilgi**, sonra **Yine de çalıştır** deyin. *Ayarlar > Uygulamalar* üzerinden kaldırılır. |
+| Windows 10/11 | `Meridian-Setup-<sürüm>.exe` | Çift tıklayın. Yönetici izni gerekmeden kullanıcınıza kurulur, Başlat Menüsü girişi ve isteğe bağlı masaüstü simgesi ekler. ⚠️ Dosya henüz imzalı olmadığı için Windows mavi bir **SmartScreen** sayfası gösterebilir: **Ek bilgi**, sonra **Yine de çalıştır** deyin. *Ayarlar > Uygulamalar* üzerinden kaldırılır. |
 | Debian, Ubuntu, Kali, Mint | `meridian_<sürüm>_all.deb` | Çift tıklayın (yazılım merkezi açılır) ya da `sudo apt install ./meridian_<sürüm>_all.deb`. Kaldırmak için `sudo apt remove meridian`. nmap birlikte kurulur. |
 | macOS | | Şimdilik yalnızca elle kurulum, aşağıya bakın. |
  
