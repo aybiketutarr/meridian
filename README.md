@@ -77,6 +77,8 @@ sudo pacman -S --needed python nmap git
 git clone https://github.com/aybiketutarr/meridian.git
 cd meridian
 python install.py                                   # installs the 'meridian' command and a menu entry
+meridian --doctor                                   # check your setup
+meridian                                            # Starts Meridian and prints a one-time local link. Open it in your browser.
 ```
  
 `~/.local/bin` is not in the PATH on Arch by default, so `meridian` may be "command not found" at first. Open a new terminal or add it once:
