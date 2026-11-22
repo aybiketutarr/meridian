@@ -16,6 +16,7 @@ Changes since 0.4.4 (they arrived in 0.5.0, 0.5.1 and 0.5.2):
 * **New look:** an editorial layout with a left rail, five themes (Black, White, Blue, Violet, Ember) and a security-themed backdrop for each. Fonts are local; nothing is loaded from the internet.
 * **App icon** on Windows and macOS, and a Windows taskbar identity of its own.
 Earlier versions (languages, trusted devices, offline hints, `meridian --doctor`, security hardening): see the [CHANGELOG](CHANGELOG.md).
+* The AI tab now offers the model as a list (installed local models, suggested models per provider, "Other..." for any name) instead of a text box.
  
 ## Installation
  
